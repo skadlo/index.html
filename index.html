@@ -54,7 +54,7 @@
             height: 100%;
             background: var(--neon-cyan);
             box-shadow: 0 0 10px var(--neon-cyan);
-            transition: width 0.3s ease;
+            transition: width 0.1s linear;
         }
 
         .stats-left {
@@ -162,29 +162,41 @@
         }
         #velocity-val { color: var(--neon-magenta); font-weight: bold; font-size: 16px; font-family: monospace; }
 
-        .jump-dots { display: flex; gap: 8px; margin-top: 10px; }
+        .jump-dots { display: flex; gap: 8px; margin-top: 10px; min-height: 12px; }
         .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); transition: 0.2s; }
         
         /* Level Up Toast */
         #level-toast {
             position: absolute;
-            top: 20%;
+            top: 30%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 48px;
-            font-weight: 900;
-            color: var(--neon-magenta);
-            text-shadow: 0 0 20px var(--neon-magenta);
+            text-align: center;
             pointer-events: none;
             opacity: 0;
             z-index: 100;
         }
-        .level-up-anim { animation: toastFade 1.5s ease-out; }
+        .toast-main {
+            font-size: 52px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 20px var(--neon-magenta), 0 0 40px var(--neon-magenta);
+            display: block;
+        }
+        .toast-sub {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+
+        .level-up-anim { animation: toastFade 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         @keyframes toastFade {
-            0% { opacity: 0; transform: translate(-50%, -30%); scale: 0.5; }
-            20% { opacity: 1; transform: translate(-50%, -50%); scale: 1.2; }
-            80% { opacity: 1; transform: translate(-50%, -50%); scale: 1; }
-            100% { opacity: 0; transform: translate(-50%, -70%); scale: 1.1; }
+            0% { opacity: 0; transform: translate(-50%, -20%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -80%) scale(1.2); }
         }
     </style>
 </head>
@@ -193,17 +205,16 @@
 <div id="game-container">
     <div id="progress-container"><div id="progress-bar"></div></div>
     
-    <div id="level-toast">LEVEL UP</div>
+    <div id="level-toast">
+        <span class="toast-sub">LEVEL PASSED</span>
+        <span class="toast-main" id="toast-text">GOOD JOB!</span>
+    </div>
 
     <div class="stats-left">
         <div id="level-display">LEVEL 1</div>
         <div class="label">Score</div>
         <div id="score" class="score-val">0</div>
-        <div class="jump-dots" id="jump-indicator">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-        </div>
+        <div class="jump-dots" id="jump-indicator"></div>
     </div>
 
     <div class="stats-right">
@@ -225,9 +236,10 @@
 
             <div class="rules-box">
                 <strong style="color: var(--neon-cyan); letter-spacing: 1px;">MISSION SPECS:</strong><br>
-                • Progress through Levels 1-10<br>
-                • Velocity & Spacing recalibrate per level<br>
-                • Maximum Speed at Level 10
+                • Short Intense Levels (1-10)<br>
+                • <strong>Lvl 4:</strong> +1 Jump (4 total)<br>
+                • <strong>Lvl 8:</strong> +1 Jump (5 total)<br>
+                • Level Clear Rewards: Confetti & Status
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -248,7 +260,8 @@
         const levelElement = document.getElementById('level-display');
         const progressBar = document.getElementById('progress-bar');
         const levelToast = document.getElementById('level-toast');
-        const jumpDots = document.getElementById('jump-indicator').children;
+        const toastText = document.getElementById('toast-text');
+        const jumpIndicator = document.getElementById('jump-indicator');
         const menu = document.getElementById('menu');
         const menuContent = document.getElementById('menu-content');
         const startBtn = document.getElementById('start-btn');
@@ -257,11 +270,10 @@
         const GRAVITY = 0.65;
         const JUMP_FORCE = -11.8; 
         const GROUND_HEIGHT = 80;
-        const MAX_JUMPS = 3; 
 
         // Level Configuration
         const MAX_LEVEL = 10;
-        const SCORE_PER_LEVEL = 1000; // Points to clear a level
+        const SCORE_PER_LEVEL = 400;
 
         let gameActive = false;
         let score = 0;
@@ -273,7 +285,7 @@
         let frameCount = 0;
         let lastSpawnFrame = 0;
         
-        let baseSpeed = 7.0; 
+        let baseSpeed = 7.5; 
         let currentSpeed = baseSpeed;
         let animationId = null;
         let runnerName = localStorage.getItem('nr_last_name') || "";
@@ -285,7 +297,7 @@
 
         const player = {
             x: 75, y: 0, width: 36, height: 36,
-            vy: 0, jumpsLeft: MAX_JUMPS, trail: []
+            vy: 0, jumpsLeft: 3, maxJumps: 3, trail: []
         };
 
         function resize() {
@@ -299,11 +311,22 @@
         resize();
 
         function updateJumpUI() {
-            for(let i = 0; i < MAX_JUMPS; i++) {
+            // Rebuild dots if count changed
+            if (jumpIndicator.children.length !== player.maxJumps) {
+                jumpIndicator.innerHTML = '';
+                for(let i=0; i<player.maxJumps; i++) {
+                    const dot = document.createElement('div');
+                    dot.className = 'dot';
+                    jumpIndicator.appendChild(dot);
+                }
+            }
+
+            const dots = jumpIndicator.children;
+            for(let i = 0; i < player.maxJumps; i++) {
                 const isActive = i < player.jumpsLeft;
-                jumpDots[i].style.opacity = isActive ? "1" : "0.15";
-                jumpDots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
-                jumpDots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
+                dots[i].style.opacity = isActive ? "1" : "0.15";
+                dots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
+                dots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
             }
         }
 
@@ -313,23 +336,32 @@
             currentLevel++;
             levelElement.innerText = `LEVEL ${currentLevel}`;
             
-            // Speed Jump
-            currentSpeed += 1.5; 
+            // Dynamic Jump Capacity Increase
+            if (currentLevel === 4) player.maxJumps = 4;
+            if (currentLevel === 8) player.maxJumps = 5;
+
+            currentSpeed += 1.2; 
             velocityElement.innerText = `${currentSpeed.toFixed(2)}x`;
             
-            // Visual feedback
+            toastText.innerText = "GOOD JOB!";
             levelToast.classList.remove('level-up-anim');
-            void levelToast.offsetWidth; // Trigger reflow
-            levelToast.innerText = `LEVEL ${currentLevel}`;
+            void levelToast.offsetWidth; 
             levelToast.classList.add('level-up-anim');
 
-            for(let i=0; i<30; i++) {
+            const colors = ['#0ff', '#f0f', '#fff', '#ff0', '#0f0'];
+            for(let i=0; i<80; i++) {
                 particles.push({
-                    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-                    vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
-                    size: Math.random()*8, life: 1, color: '#f0f'
+                    x: Math.random() * canvas.width, 
+                    y: -20, 
+                    vx: (Math.random()-0.5) * 10, 
+                    vy: Math.random() * 8 + 2,
+                    size: Math.random() * 6 + 2, 
+                    life: 2, 
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    isConfetti: true
                 });
             }
+            updateJumpUI();
         }
 
         function handleJump() {
@@ -358,7 +390,8 @@
             obstacles = [];
             particles = [];
             player.vy = 0;
-            player.jumpsLeft = MAX_JUMPS;
+            player.maxJumps = 3;
+            player.jumpsLeft = 3;
             player.trail = [];
             currentSpeed = baseSpeed; 
             frameCount = 0;
@@ -397,7 +430,6 @@
         class Obstacle {
             constructor() {
                 this.width = 30 + Math.random() * 30;
-                // Height increases with Level
                 const levelHeightMod = (currentLevel - 1) * 8;
                 const maxHeight = Math.min(130, 45 + levelHeightMod);
                 this.height = 40 + Math.random() * maxHeight;
@@ -430,27 +462,24 @@
             if (!gameActive) return;
             frameCount++;
             
-            // Score and Progress Logic
             score += (currentSpeed / 10);
             scoreElement.innerText = Math.floor(score);
             
-            const currentLevelTarget = currentLevel * SCORE_PER_LEVEL;
             const levelProgress = (score % SCORE_PER_LEVEL) / SCORE_PER_LEVEL;
             progressBar.style.width = `${levelProgress * 100}%`;
 
-            if (score >= currentLevelTarget && currentLevel < MAX_LEVEL) {
+            if (score >= currentLevel * SCORE_PER_LEVEL && currentLevel < MAX_LEVEL) {
                 triggerLevelUp();
             }
 
-            // Physics
             player.vy += GRAVITY;
             player.y += player.vy;
             const floorPos = canvas.height - GROUND_HEIGHT - player.height;
             if (player.y > floorPos) { 
                 player.y = floorPos; 
                 player.vy = 0; 
-                if (player.jumpsLeft < MAX_JUMPS) {
-                    player.jumpsLeft = MAX_JUMPS; 
+                if (player.jumpsLeft < player.maxJumps) {
+                    player.jumpsLeft = player.maxJumps; 
                     updateJumpUI();
                 }
             }
@@ -458,14 +487,9 @@
             player.trail.push({x: player.x, y: player.y});
             if (player.trail.length > 8) player.trail.shift();
 
-            // --- LOGICAL SPACING ENGINE ---
-            // minSafeFrames ensures player can jump, land, and jump again.
-            // Spacing decreases slightly with levels but never becomes physically impossible.
-            const minSafeFrames = Math.max(30, 50 - (currentLevel * 1.5)); 
+            const minSafeFrames = Math.max(28, 45 - (currentLevel * 1.8)); 
             const framesSinceLast = frameCount - lastSpawnFrame;
-            
-            // Random factor that increases with Level
-            const spawnThreshold = 0.02 + (currentLevel * 0.005);
+            const spawnThreshold = 0.02 + (currentLevel * 0.006);
 
             if (framesSinceLast > minSafeFrames && Math.random() < spawnThreshold) {
                 obstacles.push(new Obstacle());
@@ -491,9 +515,17 @@
             ctx.fillRect(player.x, player.y, player.width, player.height);
             ctx.shadowBlur = 0;
             obstacles.forEach(obs => obs.draw());
+            
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
-                p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+                p.x += p.vx; p.y += p.vy;
+                if (p.isConfetti) {
+                    p.vy += 0.1; 
+                    p.life -= 0.01;
+                } else {
+                    p.life -= 0.03;
+                }
+                
                 if (p.life <= 0) particles.splice(i, 1);
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
                 ctx.fillRect(p.x, p.y, p.size, p.size);
