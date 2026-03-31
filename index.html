@@ -479,7 +479,7 @@
 
     function gameWon() {
         gameActive = false;
-        cancelAnimationFrame(animationId);
+        if (animationId) cancelAnimationFrame(animationId);
         const finalScore = Math.floor(score);
         updateLocalLeaderboard(runnerName, finalScore);
 
@@ -503,7 +503,7 @@
 
     function gameOver() {
         gameActive = false;
-        cancelAnimationFrame(animationId);
+        if (animationId) cancelAnimationFrame(animationId);
         const finalScore = Math.floor(score);
         updateLocalLeaderboard(runnerName, finalScore);
 
@@ -597,7 +597,8 @@
             obs.update();
             if (player.x < obs.x + obs.width && player.x + player.width > obs.x && 
                 player.y < obs.y + obs.height && player.y + player.height > obs.y) {
-                gameOver(); return;
+                gameOver(); 
+                return; // Stop processing immediately
             }
             if (obs.x + obs.width < -100) obstacles.splice(i, 1);
         }
