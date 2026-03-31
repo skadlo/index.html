@@ -77,7 +77,7 @@
             padding: 25px;
             border: 2px solid var(--neon-cyan);
             text-align: center;
-            z-index: 100;
+            z-index: 9999; /* Max priority */
             width: 85%;
             max-width: 380px;
             box-shadow: 0 0 50px rgba(0, 255, 255, 0.3);
@@ -86,7 +86,7 @@
             -webkit-backdrop-filter: blur(15px);
             max-height: 90vh;
             overflow-y: auto;
-            display: block;
+            display: block; /* Always visible initially */
         }
         
         input {
@@ -149,17 +149,18 @@
         .btn {
             background: var(--neon-cyan);
             color: #000;
-            padding: 15px;
+            padding: 18px;
             border: none;
             border-radius: 16px;
             font-weight: 900;
             cursor: pointer;
             width: 100%;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             text-transform: uppercase;
             box-shadow: 0 4px 0 #00cccc;
             transition: all 0.1s;
             margin-top: 8px;
+            display: block;
         }
         
         .btn:active {
@@ -202,13 +203,13 @@
             <div class="leaderboard-container">
                 <div class="leaderboard-title">Local Top Scores</div>
                 <div id="local-scores">
-                    <div class="score-row" style="opacity: 0.5; justify-content: center;">No history found</div>
+                    <div class="score-row" style="opacity: 0.5; justify-content: center;">Scanning records...</div>
                 </div>
             </div>
 
             <div class="rules-box">
                 <strong style="color: var(--neon-cyan);">PROTOCOLS:</strong><br>
-                • Tap/Space to Jump (3x mid-air)<br>
+                • Tap or Space to Jump (3x mid-air)<br>
                 • Avoid Magenta Hazards<br>
                 • Speed increases over time
             </div>
@@ -221,18 +222,19 @@
 </div>
 
 <script>
-    // LOCAL STORAGE DATA HANDLING
-    const STORAGE_KEY = 'neon_runner_local_scores';
+    // --- STORAGE LOGIC ---
+    const STORAGE_KEY = 'neon_runner_local_v3';
     
     function getLocalScores() {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
+        try {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch(e) { return []; }
     }
 
     function saveLocalScore(name, score) {
         let scores = getLocalScores();
         scores.push({ name, score: Math.floor(score), date: Date.now() });
-        // Keep top 10
         scores.sort((a, b) => b.score - a.score);
         scores = scores.slice(0, 10);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
@@ -241,6 +243,7 @@
 
     function renderLeaderboard() {
         const container = document.getElementById('local-scores');
+        if (!container) return;
         const scores = getLocalScores();
         if (scores.length === 0) {
             container.innerHTML = '<div class="score-row" style="justify-content: center; opacity: 0.5;">No history found</div>';
@@ -257,14 +260,13 @@
             container.appendChild(row);
         });
 
-        // Update High Score UI
         if (scores.length > 0) {
             document.getElementById('best').innerText = scores[0].score;
             document.getElementById('best-name').innerText = scores[0].name.toUpperCase();
         }
     }
 
-    // GAME ENGINE
+    // --- GAME ENGINE ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('score');
@@ -295,7 +297,7 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         player.y = canvas.height - GROUND_HEIGHT - player.height;
-        drawStaticBG();
+        if(!gameActive) drawStaticBG();
     }
 
     function updateJumpUI() {
@@ -313,7 +315,6 @@
             player.vy = JUMP_FORCE;
             player.jumpsLeft--;
             updateJumpUI();
-            // Jump particles
             for(let i=0; i<6; i++) {
                 particles.push({
                     x: player.x + player.width/2, y: player.y + player.height/2,
@@ -325,7 +326,9 @@
         }
     }
 
-    function startGame() {
+    function startGame(e) {
+        if(e) e.preventDefault();
+        
         const name = nameInput.value.trim() || "RUNNER";
         localStorage.setItem('last_neon_name', name);
         
@@ -357,7 +360,6 @@
         menu.style.display = 'block';
         const scores = getLocalScores();
         
-        // Refresh retry screen
         document.getElementById('menu-content').innerHTML = `
             <h2 style="color: var(--neon-magenta); margin:0; font-size: 24px;">RUN TERMINATED</h2>
             <div style="font-size: 54px; font-weight: 900; margin: 10px 0; text-shadow: 0 0 15px var(--neon-magenta);">${finalScore}</div>
@@ -387,7 +389,7 @@
         constructor() {
             this.width = 28 + Math.random() * 25;
             this.height = 35 + Math.random() * 55;
-            this.x = canvas.width + 50;
+            this.x = canvas.width + 100;
             this.y = canvas.height - GROUND_HEIGHT - this.height;
         }
         update() { this.x -= currentSpeed; }
@@ -444,7 +446,6 @@
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obs = obstacles[i]; 
             obs.update();
-            // Collision
             if (player.x < obs.x + obs.width - 4 && player.x + player.width > obs.x + 4 && 
                 player.y < obs.y + obs.height - 4 && player.y + player.height > obs.y + 4) {
                 gameOver(); return;
@@ -476,17 +477,29 @@
         animationId = requestAnimationFrame(loop);
     }
 
-    // Startup
-    window.addEventListener('load', () => {
+    // --- INITIALIZATION ---
+    function init() {
         resize();
         renderLeaderboard();
         const savedName = localStorage.getItem('last_neon_name');
         if (savedName) nameInput.value = savedName;
-    });
+        
+        // Force visual update
+        drawStaticBG();
+    }
+
+    // Attempt double init to be sure
+    if (document.readyState === 'complete') {
+        init();
+    } else {
+        window.addEventListener('load', init);
+    }
 
     window.addEventListener('resize', resize);
     
-    startBtn.addEventListener('click', startGame);
+    // Explicit click and touch for the button
+    startBtn.onclick = startGame;
+    startBtn.ontouchend = startGame;
     
     window.addEventListener('keydown', (e) => { 
         if(e.code === 'Space' || e.key === ' ') {
