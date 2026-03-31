@@ -261,8 +261,7 @@
             <div class="rules-box">
                 • 10 Levels to clear the mission<br>
                 • Infinite survival after Lvl 10<br>
-                • Extra jumps granted at Lvl 4 & 8<br>
-                • Adjusted for phone screens
+                • Extra jumps granted at Lvl 4 & 8
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -479,7 +478,6 @@
         `).join('');
 
         document.getElementById('retry-btn').onclick = () => {
-            // Restore original menu content for next play
             location.reload();
         };
     }
@@ -534,7 +532,6 @@
         player.trail.push({x: player.x, y: player.y});
         if (player.trail.length > 8) player.trail.shift();
 
-        // Phone Friendly spacing
         let minSafeFrames = Math.max(50, 70 - (currentLevel * 1.5)); 
         if (canvas.width < 600) minSafeFrames += (currentLevel > 6 ? 20 : 10); 
         
