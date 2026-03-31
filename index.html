@@ -105,6 +105,7 @@
             border-radius: 28px;
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
+            display: block; /* Visible initially */
         }
         
         input {
@@ -228,10 +229,23 @@
             85% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
             100% { opacity: 0; transform: translate(-50%, -80%) scale(1.2); }
         }
+
+        #flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: red;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
     </style>
 </head>
 <body>
 
+<div id="flash-overlay"></div>
 <div id="game-container">
     <div id="progress-container"><div id="progress-bar"></div></div>
     
@@ -268,7 +282,7 @@
 
             <div class="rules-box">
                 • 10 Levels to clear the mission<br>
-                • Extra jumps granted at Lvl 4 & 8
+                • Infinite Mode follows mission clear
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -279,56 +293,20 @@
 </div>
 
 <script>
-    // --- Local Storage Leaderboard Logic ---
-    let leaderboard = JSON.parse(localStorage.getItem('neon_runner_leaderboard')) || [];
-    let runnerName = localStorage.getItem('neon_runner_last_name') || "";
-
-    function updateLocalLeaderboard(name, score) {
-        leaderboard.push({ name: name || "Anonymous", score: Math.floor(score) });
-        leaderboard.sort((a, b) => b.score - a.score);
-        leaderboard = leaderboard.slice(0, 5);
-        localStorage.setItem('neon_runner_leaderboard', JSON.stringify(leaderboard));
-        renderLeaderboard();
-    }
-
-    function renderLeaderboard() {
-        const list = document.getElementById('leaderboard-list');
-        const bestEl = document.getElementById('best');
-        const bestNameEl = document.getElementById('best-name');
-        
-        if (leaderboard.length === 0) {
-            list.innerHTML = '<div style="text-align:center; font-size: 12px; padding:10px; opacity:0.5;">No records found</div>';
-            return;
-        }
-
-        bestEl.innerText = leaderboard[0].score;
-        bestNameEl.innerText = leaderboard[0].name.toUpperCase();
-
-        list.innerHTML = leaderboard.map((entry, i) => `
-            <div class="leaderboard-row">
-                <span class="lb-name">#${i+1} ${entry.name}</span>
-                <span class="lb-score">${entry.score}</span>
-            </div>
-        `).join('');
-    }
-
-    // --- Game Setup ---
+    // --- State & Storage ---
+    let leaderboard = JSON.parse(localStorage.getItem('neon_runner_lb_v2')) || [];
+    let runnerName = localStorage.getItem('neon_runner_name_v2') || "";
+    
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('score');
     const levelElement = document.getElementById('level-display');
     const progressBar = document.getElementById('progress-bar');
-    const levelToast = document.getElementById('level-toast');
-    const toastText = document.getElementById('toast-text');
-    const toastSub = document.getElementById('toast-sub-text');
-    const jumpIndicator = document.getElementById('jump-indicator');
     const menu = document.getElementById('menu');
     const menuContent = document.getElementById('menu-content');
-    const startBtn = document.getElementById('start-btn');
+    const flashOverlay = document.getElementById('flash-overlay');
     const nameInput = document.getElementById('username');
-
-    if(runnerName) nameInput.value = runnerName;
-    renderLeaderboard();
+    const jumpIndicator = document.getElementById('jump-indicator');
 
     const GRAVITY = 0.65;
     const JUMP_FORCE = -11.8; 
@@ -345,20 +323,43 @@
     let currentSpeed = 7.5;
     let animationId = null;
     let isInfiniteMode = false;
+    let shakeAmount = 0;
 
     const player = {
         x: 75, y: 0, width: 36, height: 36,
         vy: 0, jumpsLeft: 3, maxJumps: 3, trail: []
     };
 
+    // --- Init ---
+    if(runnerName) nameInput.value = runnerName;
+    renderLeaderboard();
+
+    function renderLeaderboard() {
+        const list = document.getElementById('leaderboard-list');
+        const bestEl = document.getElementById('best');
+        const bestNameEl = document.getElementById('best-name');
+        
+        if (leaderboard.length === 0) {
+            list.innerHTML = '<div style="text-align:center; font-size: 12px; padding:10px; opacity:0.5;">No records</div>';
+            return;
+        }
+
+        bestEl.innerText = leaderboard[0].score;
+        bestNameEl.innerText = leaderboard[0].name.toUpperCase();
+        list.innerHTML = leaderboard.map((e, i) => `
+            <div class="leaderboard-row"><span class="lb-name">#${i+1} ${e.name}</span><span class="lb-score">${e.score}</span></div>
+        `).join('');
+    }
+
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         player.x = canvas.width < 600 ? 40 : 75;
-        player.y = canvas.height - GROUND_HEIGHT - player.height;
     }
     window.addEventListener('resize', resize);
     resize();
+
+    // --- Logic ---
 
     function updateJumpUI() {
         if (jumpIndicator.children.length !== player.maxJumps) {
@@ -373,62 +374,40 @@
         for(let i = 0; i < player.maxJumps; i++) {
             const isActive = i < player.jumpsLeft;
             dots[i].style.opacity = isActive ? "1" : "0.15";
-            dots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
             dots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
         }
     }
 
     function triggerLevelUp() {
         if (currentLevel === 10 && !isInfiniteMode) {
-            handleMissionComplete();
+            pauseForChoice();
             return;
         }
-
         currentLevel++;
         levelElement.innerText = isInfiniteMode ? `INF LVL ${currentLevel}` : `LEVEL ${currentLevel}`;
-        
         if (currentLevel === 4) player.maxJumps = 4;
         if (currentLevel === 8) player.maxJumps = 5;
-
-        const isMobile = canvas.width < 600;
-        currentSpeed += (isMobile ? 0.9 : 1.2);
-
-        toastSub.innerText = "LEVEL PASSED";
-        toastText.innerText = isInfiniteMode ? "STILL GOING!" : "GOOD JOB!";
-
-        levelToast.classList.remove('level-up-anim');
-        void levelToast.offsetWidth; 
-        levelToast.classList.add('level-up-anim');
-
-        const colors = ['#0ff', '#f0f', '#fff', '#ff0', '#0f0'];
-        for(let i=0; i<80; i++) {
-            particles.push({
-                x: Math.random() * canvas.width, y: -20, 
-                vx: (Math.random()-0.5) * 12, vy: Math.random() * 10 + 2,
-                size: Math.random() * 6 + 2, life: 2, 
-                color: colors[Math.floor(Math.random() * colors.length)],
-                isConfetti: true
-            });
-        }
+        currentSpeed += (canvas.width < 600 ? 0.8 : 1.1);
+        
+        const toast = document.getElementById('level-toast');
+        toast.classList.remove('level-up-anim');
+        void toast.offsetWidth;
+        toast.classList.add('level-up-anim');
         updateJumpUI();
     }
 
-    function handleMissionComplete() {
+    function pauseForChoice() {
         gameActive = false;
         cancelAnimationFrame(animationId);
-        
         menu.style.display = 'block';
         menuContent.innerHTML = `
-            <h2 style="color: var(--neon-cyan); margin:0; font-size: 24px; text-shadow: 0 0 15px var(--neon-cyan);">MISSION COMPLETE</h2>
-            <div style="font-size: 14px; margin-top: 5px; color: #fff;">LEVEL 10 REACHED</div>
-            <div style="font-size: 60px; font-weight: 900; margin: 10px 0; color: var(--neon-cyan);">${Math.floor(score)}</div>
-            
-            <button class="btn" id="finish-btn">FINISH RUN</button>
-            <button class="btn secondary" id="continue-btn">CONTINUE (INFINITE)</button>
+            <h2 style="color: var(--neon-cyan); margin:0;">MISSION CLEAR</h2>
+            <div style="font-size: 60px; font-weight: 900; color: var(--neon-cyan);">${Math.floor(score)}</div>
+            <button class="btn" id="finish-btn">CLAIM VICTORY</button>
+            <button class="btn secondary" id="inf-btn">GO INFINITE</button>
         `;
-        
-        document.getElementById('finish-btn').onclick = gameWon;
-        document.getElementById('continue-btn').onclick = () => {
+        document.getElementById('finish-btn').onclick = () => endGameUI("VICTORY");
+        document.getElementById('inf-btn').onclick = () => {
             isInfiniteMode = true;
             menu.style.display = 'none';
             gameActive = true;
@@ -437,211 +416,136 @@
         };
     }
 
-    function handleJump() {
+    function endGameUI(type) {
+        gameActive = false;
+        cancelAnimationFrame(animationId);
+        
+        const finalScore = Math.floor(score);
+        leaderboard.push({ name: runnerName || "Runner", score: finalScore });
+        leaderboard.sort((a, b) => b.score - a.score);
+        leaderboard = leaderboard.slice(0, 5);
+        localStorage.setItem('neon_runner_lb_v2', JSON.stringify(leaderboard));
+
+        menu.style.display = 'block';
+        const color = type === "VICTORY" ? "var(--neon-cyan)" : "var(--neon-magenta)";
+        menuContent.innerHTML = `
+            <h2 style="color: ${color}; margin:0;">${type === "VICTORY" ? "WINNER" : "GAME OVER"}</h2>
+            <div style="font-size: 14px; opacity: 0.7;">Lvl ${currentLevel} ${isInfiniteMode ? '(Infinite)' : ''}</div>
+            <div style="font-size: 60px; font-weight: 900; margin: 10px 0; color: ${color};">${finalScore}</div>
+            <div class="leaderboard" id="final-lb"></div>
+            <button class="btn" onclick="location.reload()">RETRY</button>
+        `;
+        
+        const list = document.getElementById('final-lb');
+        list.innerHTML = leaderboard.map((e, i) => `
+            <div class="leaderboard-row"><span>#${i+1} ${e.name}</span><span>${e.score}</span></div>
+        `).join('');
+    }
+
+    function startGame() {
+        runnerName = nameInput.value.trim() || "Runner";
+        localStorage.setItem('neon_runner_name_v2', runnerName);
+        
+        score = 0; currentLevel = 1; isInfiniteMode = false;
+        obstacles = []; particles = []; frameCount = 0;
+        currentSpeed = 7.5; player.vy = 0; player.maxJumps = 3;
+        player.jumpsLeft = 3; player.trail = [];
+        player.y = canvas.height - GROUND_HEIGHT - player.height;
+        
+        menu.style.display = 'none';
+        gameActive = true;
+        updateJumpUI();
+        loop();
+    }
+
+    function loop() {
+        if (!gameActive) return;
+
+        // Clear and Shake
+        if (shakeAmount > 0) shakeAmount *= 0.9;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if (shakeAmount > 0.5) {
+            ctx.translate((Math.random()-0.5)*shakeAmount, (Math.random()-0.5)*shakeAmount);
+        }
+
+        frameCount++;
+        score += (currentSpeed / 10);
+        scoreElement.innerText = Math.floor(score);
+        
+        // Progress
+        const levelProgress = (score % SCORE_PER_LEVEL) / SCORE_PER_LEVEL;
+        progressBar.style.width = `${levelProgress * 100}%`;
+        if (score >= currentLevel * SCORE_PER_LEVEL) triggerLevelUp();
+
+        // Player Physics
+        player.vy += GRAVITY;
+        player.y += player.vy;
+        const floorPos = canvas.height - GROUND_HEIGHT - player.height;
+        if (player.y > floorPos) {
+            player.y = floorPos; player.vy = 0;
+            if (player.jumpsLeft < player.maxJumps) {
+                player.jumpsLeft = player.maxJumps; updateJumpUI();
+            }
+        }
+
+        // Obstacles
+        let minSafe = Math.max(45, 65 - currentLevel);
+        if ((frameCount - lastSpawnFrame) > minSafe && Math.random() < 0.04) {
+            const h = 40 + Math.random() * Math.min(130, 40 + currentLevel * 7);
+            obstacles.push({ x: canvas.width + 50, y: canvas.height - GROUND_HEIGHT - h, w: 30+Math.random()*25, h: h });
+            lastSpawnFrame = frameCount;
+        }
+
+        // Collision & Movement
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            const o = obstacles[i];
+            o.x -= currentSpeed;
+            
+            if (player.x < o.x + o.w && player.x + player.width > o.x && 
+                player.y < o.y + o.h && player.y + player.height > o.y) {
+                
+                // CRASH EFFECT
+                gameActive = false;
+                shakeAmount = 20;
+                flashOverlay.style.opacity = '0.5';
+                setTimeout(() => { flashOverlay.style.opacity = '0'; }, 100);
+                
+                cancelAnimationFrame(animationId);
+                endGameUI("DEFEAT");
+                return; // Hard exit loop
+            }
+            if (o.x < -100) obstacles.splice(i, 1);
+        }
+
+        // Draw World
+        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(0, canvas.height - GROUND_HEIGHT); ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); ctx.stroke();
+
+        ctx.fillStyle = '#0ff';
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+        
+        ctx.fillStyle = '#f0f';
+        obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+
+        animationId = requestAnimationFrame(loop);
+    }
+
+    // Input
+    function handleAction() {
         if (!gameActive) return;
         if (player.jumpsLeft > 0) {
             player.vy = JUMP_FORCE;
             player.jumpsLeft--;
             updateJumpUI();
-            for(let i=0; i<10; i++) {
-                particles.push({
-                    x: player.x + player.width/2, y: player.y + player.height/2,
-                    vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
-                    size: Math.random()*5, life: 1, color: player.jumpsLeft === 0 ? '#f0f' : '#0ff'
-                });
-            }
         }
     }
 
-    function startGame() {
-        runnerName = nameInput.value.trim() || "Runner";
-        localStorage.setItem('neon_runner_last_name', runnerName);
-        nameInput.blur();
-        score = 0;
-        currentLevel = 1;
-        isInfiniteMode = false;
-        levelElement.innerText = `LEVEL 1`;
-        obstacles = [];
-        particles = [];
-        player.vy = 0;
-        player.maxJumps = 3;
-        player.jumpsLeft = 3;
-        player.trail = [];
-        currentSpeed = 7.5; 
-        frameCount = 0;
-        lastSpawnFrame = 0;
-        menu.style.display = 'none';
-        gameActive = true;
-        updateJumpUI();
-        if (animationId) cancelAnimationFrame(animationId);
-        loop();
-    }
-
-    function gameWon() {
-        gameActive = false;
-        if (animationId) cancelAnimationFrame(animationId);
-        const finalScore = Math.floor(score);
-        updateLocalLeaderboard(runnerName, finalScore);
-
-        menu.style.display = 'block';
-        menuContent.innerHTML = `
-            <h2 style="color: var(--neon-cyan); margin:0; font-size: 24px; text-shadow: 0 0 15px var(--neon-cyan);">MISSION ACCOMPLISHED</h2>
-            <div style="font-size: 14px; margin-top: 5px; color: #fff;">VICTORY RECORDED</div>
-            <div style="font-size: 60px; font-weight: 900; margin: 10px 0; color: var(--neon-cyan);">${finalScore}</div>
-            
-            <div class="leaderboard">
-                <div class="leaderboard-title">Elite Standings</div>
-                <div id="final-lb-list"></div>
-            </div>
-
-            <button class="btn" id="retry-btn">RUN AGAIN</button>
-        `;
-        
-        renderFinalLeaderboard();
-        document.getElementById('retry-btn').onclick = () => location.reload();
-    }
-
-    function gameOver() {
-        gameActive = false;
-        if (animationId) cancelAnimationFrame(animationId);
-        const finalScore = Math.floor(score);
-        updateLocalLeaderboard(runnerName, finalScore);
-
-        menu.style.display = 'block';
-        menuContent.innerHTML = `
-            <h2 style="color: var(--neon-magenta); margin:0; font-size: 28px; text-shadow: 0 0 15px var(--neon-magenta);">GAME OVER</h2>
-            <div style="font-size: 14px; margin-top: 5px; color: #ccc;">${isInfiniteMode ? 'INFINITE MODE ENDED' : 'FAILED @ LVL ' + currentLevel}</div>
-            <div style="font-size: 60px; font-weight: 900; margin: 10px 0;">${finalScore}</div>
-            
-            <div class="leaderboard">
-                <div class="leaderboard-title">Sector Standings</div>
-                <div id="final-lb-list"></div>
-            </div>
-
-            <button class="btn" id="retry-btn">RE-START</button>
-        `;
-        
-        renderFinalLeaderboard();
-        document.getElementById('retry-btn').onclick = () => location.reload();
-    }
-
-    function renderFinalLeaderboard() {
-        const list = document.getElementById('final-lb-list');
-        list.innerHTML = leaderboard.slice(0, 3).map((e, i) => `
-            <div class="leaderboard-row"><span class="lb-name">#${i+1} ${e.name}</span><span class="lb-score">${e.score}</span></div>
-        `).join('');
-    }
-
-    class Obstacle {
-        constructor() {
-            this.width = 30 + Math.random() * 30;
-            const levelHeightMod = (currentLevel - 1) * 8;
-            const maxHeight = Math.min(130, 45 + levelHeightMod);
-            this.height = 40 + Math.random() * maxHeight;
-            this.x = canvas.width + 100;
-            this.y = canvas.height - GROUND_HEIGHT - this.height;
-        }
-        update() { this.x -= currentSpeed; }
-        draw() {
-            ctx.fillStyle = '#f0f';
-            ctx.shadowBlur = 10; ctx.shadowColor = '#f0f';
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(this.x+3, this.y+3, this.width-6, this.height-6);
-        }
-    }
-
-    function loop() {
-        if (!gameActive) return;
-        frameCount++;
-        
-        score += (currentSpeed / 10);
-        scoreElement.innerText = Math.floor(score);
-        
-        const levelProgress = (score % SCORE_PER_LEVEL) / SCORE_PER_LEVEL;
-        progressBar.style.width = `${levelProgress * 100}%`;
-
-        if (score >= currentLevel * SCORE_PER_LEVEL) {
-            triggerLevelUp();
-            if (!gameActive) return; 
-        }
-
-        player.vy += GRAVITY;
-        player.y += player.vy;
-        const floorPos = canvas.height - GROUND_HEIGHT - player.height;
-        if (player.y > floorPos) { 
-            player.y = floorPos; 
-            player.vy = 0; 
-            if (player.jumpsLeft < player.maxJumps) {
-                player.jumpsLeft = player.maxJumps; 
-                updateJumpUI();
-            }
-        }
-
-        player.trail.push({x: player.x, y: player.y});
-        if (player.trail.length > 8) player.trail.shift();
-
-        let minSafeFrames = Math.max(50, 70 - (currentLevel * 1.5)); 
-        if (canvas.width < 600) minSafeFrames += (currentLevel > 6 ? 20 : 10); 
-        
-        const spawnThreshold = Math.min(0.035, 0.015 + (currentLevel * 0.002));
-        if ((frameCount - lastSpawnFrame) > minSafeFrames && Math.random() < spawnThreshold) {
-            obstacles.push(new Obstacle());
-            lastSpawnFrame = frameCount;
-        }
-
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-            const obs = obstacles[i];
-            obs.update();
-            if (player.x < obs.x + obs.width && player.x + player.width > obs.x && 
-                player.y < obs.y + obs.height && player.y + player.height > obs.y) {
-                gameOver(); 
-                return; // Stop processing immediately
-            }
-            if (obs.x + obs.width < -100) obstacles.splice(i, 1);
-        }
-
-        // Draw
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
-        ctx.shadowBlur = 12; ctx.shadowColor = '#0ff';
-        ctx.beginPath(); ctx.moveTo(0, canvas.height - GROUND_HEIGHT); 
-        ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        player.trail.forEach((pos, i) => {
-            ctx.fillStyle = `rgba(0, 255, 255, ${i * 0.04})`;
-            ctx.fillRect(pos.x, pos.y, player.width, player.height);
-        });
-        ctx.fillStyle = '#0ff'; ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
-        ctx.fillRect(player.x, player.y, player.width, player.height);
-        ctx.shadowBlur = 0;
-        obstacles.forEach(obs => obs.draw());
-        
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.x += p.vx; p.y += p.vy;
-            if (p.isConfetti) { p.vy += 0.1; p.life -= 0.01; } else { p.life -= 0.03; }
-            if (p.life <= 0) particles.splice(i, 1);
-            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-        }
-        ctx.globalAlpha = 1;
-        animationId = requestAnimationFrame(loop);
-    }
-
-    startBtn.onclick = startGame;
-    window.addEventListener('keydown', (e) => { 
-        if(e.code === 'Space' || e.key === ' ') {
-            if (gameActive) { e.preventDefault(); handleJump(); }
-            else if (menu.style.display !== 'none' && !nameInput.matches(':focus')) startGame();
-        }
-    });
-    canvas.addEventListener('touchstart', (e) => {
-        if (gameActive) { e.preventDefault(); handleJump(); }
-    }, {passive: false});
+    document.getElementById('start-btn').onclick = startGame;
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space') { e.preventDefault(); handleAction(); }});
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(); }, {passive: false});
 
 </script>
 </body>
