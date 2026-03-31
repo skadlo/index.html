@@ -487,10 +487,14 @@
             player.trail.push({x: player.x, y: player.y});
             if (player.trail.length > 8) player.trail.shift();
 
-            // DIFFICULTY ADJUSTMENT: Increased minSafeFrames and reduced spawn probability growth
-            const minSafeFrames = Math.max(35, 60 - (currentLevel * 2)); 
+            // DIFFICULTY ADJUSTMENT: 
+            // Level 7+ Buffer: We cap the minimum frames between obstacles at 45 
+            // to ensure players have room to land and jump again, even as speed increases.
+            const minSafeFrames = Math.max(45, 65 - (currentLevel * 2)); 
             const framesSinceLast = frameCount - lastSpawnFrame;
-            const spawnThreshold = 0.015 + (currentLevel * 0.004);
+            
+            // Capped spawn probability for high levels to avoid "walls" of obstacles
+            const spawnThreshold = Math.min(0.04, 0.015 + (currentLevel * 0.003));
 
             if (framesSinceLast > minSafeFrames && Math.random() < spawnThreshold) {
                 obstacles.push(new Obstacle());
