@@ -487,9 +487,10 @@
             player.trail.push({x: player.x, y: player.y});
             if (player.trail.length > 8) player.trail.shift();
 
-            const minSafeFrames = Math.max(28, 45 - (currentLevel * 1.8)); 
+            // DIFFICULTY ADJUSTMENT: Increased minSafeFrames and reduced spawn probability growth
+            const minSafeFrames = Math.max(35, 60 - (currentLevel * 2)); 
             const framesSinceLast = frameCount - lastSpawnFrame;
-            const spawnThreshold = 0.02 + (currentLevel * 0.006);
+            const spawnThreshold = 0.015 + (currentLevel * 0.004);
 
             if (framesSinceLast > minSafeFrames && Math.random() < spawnThreshold) {
                 obstacles.push(new Obstacle());
