@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Neon Runner - Cloud Edition</title>
+    <title>Neon Runner - Local Edition</title>
     <style>
         :root {
             --neon-cyan: #0ff;
@@ -146,7 +146,7 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
         .leaderboard-row:last-child { border: none; }
-        .lb-name { color: #fff; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+        .lb-name { color: #fff; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
         .lb-score { color: var(--neon-cyan); font-family: monospace; }
         
         .rules-box {
@@ -240,9 +240,9 @@
     </div>
 
     <div class="stats-right">
-        <div class="label">Global Best</div>
+        <div class="label">Personal Best</div>
         <div id="best" style="font-size: 22px; font-weight: 900; color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta);">0</div>
-        <div id="best-name" style="font-size: 11px; opacity: 0.8; margin-top: 2px; font-weight: bold;">LOADING...</div>
+        <div id="best-name" style="font-size: 11px; opacity: 0.8; margin-top: 2px; font-weight: bold;">---</div>
     </div>
 
     <div id="menu">
@@ -252,17 +252,17 @@
             <input type="text" id="username" placeholder="RUNNER NAME" maxlength="12">
 
             <div class="leaderboard" id="leaderboard-container">
-                <div class="leaderboard-title">Top Sector Runners</div>
+                <div class="leaderboard-title">Local Top Runners</div>
                 <div id="leaderboard-list">
-                    <div style="text-align:center; font-size: 12px; padding: 10px; opacity: 0.5;">Connecting to network...</div>
+                    <!-- High scores injected here -->
                 </div>
             </div>
 
             <div class="rules-box">
-                • <strong>Mission:</strong> 10 Levels of Escalation<br>
-                • <strong>End Game:</strong> Infinite survival after Lvl 10<br>
-                • <strong>Phone Boost:</strong> Extra spacing on mobile<br>
-                • <strong>Jumps:</strong> +1 at Lvl 4 & 8
+                • 10 Levels to clear the mission<br>
+                • Infinite survival after Lvl 10<br>
+                • Extra jumps granted at Lvl 4 & 8<br>
+                • Adjusted for phone screens
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -272,63 +272,19 @@
     <canvas id="gameCanvas"></canvas>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+<script>
+    // --- Local Storage Leaderboard Logic ---
+    let leaderboard = JSON.parse(localStorage.getItem('neon_runner_leaderboard')) || [];
+    let runnerName = localStorage.getItem('neon_runner_last_name') || "";
 
-    // --- Firebase Setup ---
-    const firebaseConfig = JSON.parse(__firebase_config);
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'neon-runner-v2';
-    
-    let user = null;
-    let leaderboardData = [];
-
-    const initAuth = async () => {
-        try {
-            await signInAnonymously(auth);
-        } catch (e) { console.error("Auth failed", e); }
-    };
-    initAuth();
-
-    onAuthStateChanged(auth, (u) => {
-        user = u;
-        if (user) {
-            setupLeaderboardListener();
-        }
-    });
-
-    function setupLeaderboardListener() {
-        const lbRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
-        // Simple query as per Rule 2 (No complex queries)
-        onSnapshot(lbRef, (snapshot) => {
-            leaderboardData = [];
-            snapshot.forEach(doc => {
-                leaderboardData.push({ id: doc.id, ...doc.data() });
-            });
-            // Sort in memory
-            leaderboardData.sort((a, b) => b.score - a.score);
-            renderLeaderboard();
-        }, (err) => console.error("LB sync error", err));
-    }
-
-    async function saveScore(name, finalScore) {
-        if (!user) return;
-        const scoreId = user.uid;
-        // Check if existing score is lower
-        const existing = leaderboardData.find(d => d.id === scoreId);
-        if (existing && existing.score >= finalScore) return;
-
-        try {
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', scoreId), {
-                name: name || "Anonymous",
-                score: finalScore,
-                timestamp: Date.now()
-            });
-        } catch (e) { console.error("Score save failed", e); }
+    function updateLocalLeaderboard(name, score) {
+        leaderboard.push({ name: name || "Anonymous", score: Math.floor(score) });
+        // Sort descending
+        leaderboard.sort((a, b) => b.score - a.score);
+        // Keep top 5
+        leaderboard = leaderboard.slice(0, 5);
+        localStorage.setItem('neon_runner_leaderboard', JSON.stringify(leaderboard));
+        renderLeaderboard();
     }
 
     function renderLeaderboard() {
@@ -336,25 +292,25 @@
         const bestEl = document.getElementById('best');
         const bestNameEl = document.getElementById('best-name');
         
-        if (leaderboardData.length === 0) {
-            list.innerHTML = '<div style="text-align:center; font-size: 12px; padding:10px; opacity:0.5;">No data yet</div>';
+        if (leaderboard.length === 0) {
+            list.innerHTML = '<div style="text-align:center; font-size: 12px; padding:10px; opacity:0.5;">No records found</div>';
             return;
         }
 
-        // Update Top UI
-        bestEl.innerText = Math.floor(leaderboardData[0].score);
-        bestNameEl.innerText = leaderboardData[0].name.toUpperCase();
+        // Top UI
+        bestEl.innerText = leaderboard[0].score;
+        bestNameEl.innerText = leaderboard[0].name.toUpperCase();
 
-        // Update Menu List
-        list.innerHTML = leaderboardData.slice(0, 5).map((entry, i) => `
+        // Menu List
+        list.innerHTML = leaderboard.map((entry, i) => `
             <div class="leaderboard-row">
                 <span class="lb-name">#${i+1} ${entry.name}</span>
-                <span class="lb-score">${Math.floor(entry.score)}</span>
+                <span class="lb-score">${entry.score}</span>
             </div>
         `).join('');
     }
 
-    // --- Game Logic ---
+    // --- Game Setup ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('score');
@@ -368,6 +324,9 @@
     const menuContent = document.getElementById('menu-content');
     const startBtn = document.getElementById('start-btn');
     const nameInput = document.getElementById('username');
+
+    if(runnerName) nameInput.value = runnerName;
+    renderLeaderboard();
 
     const GRAVITY = 0.65;
     const JUMP_FORCE = -11.8; 
@@ -383,10 +342,7 @@
     let lastSpawnFrame = 0;
     let currentSpeed = 7.5;
     let animationId = null;
-    let runnerName = localStorage.getItem('nr_last_name') || "";
     let hasClearedGame = false;
-
-    if(runnerName) nameInput.value = runnerName;
 
     const player = {
         x: 75, y: 0, width: 36, height: 36,
@@ -443,13 +399,12 @@
         void levelToast.offsetWidth; 
         levelToast.classList.add('level-up-anim');
 
-        // Confetti
         const colors = ['#0ff', '#f0f', '#fff', '#ff0', '#0f0'];
-        for(let i=0; i<100; i++) {
+        for(let i=0; i<80; i++) {
             particles.push({
                 x: Math.random() * canvas.width, y: -20, 
                 vx: (Math.random()-0.5) * 12, vy: Math.random() * 10 + 2,
-                size: Math.random() * 6 + 2, life: 2.5, 
+                size: Math.random() * 6 + 2, life: 2, 
                 color: colors[Math.floor(Math.random() * colors.length)],
                 isConfetti: true
             });
@@ -475,7 +430,7 @@
 
     function startGame() {
         runnerName = nameInput.value.trim() || "Runner";
-        localStorage.setItem('nr_last_name', runnerName);
+        localStorage.setItem('neon_runner_last_name', runnerName);
         nameInput.blur();
         score = 0;
         currentLevel = 1;
@@ -497,13 +452,13 @@
         loop();
     }
 
-    async function gameOver() {
+    function gameOver() {
         gameActive = false;
         cancelAnimationFrame(animationId);
         const finalScore = Math.floor(score);
         
-        // Save to Global Leaderboard
-        saveScore(runnerName, finalScore);
+        // Save to Local Leaderboard
+        updateLocalLeaderboard(runnerName, finalScore);
 
         menu.style.display = 'block';
         menuContent.innerHTML = `
@@ -511,20 +466,22 @@
             <div style="font-size: 60px; font-weight: 900; margin: 10px 0;">${finalScore}</div>
             
             <div class="leaderboard">
-                <div class="leaderboard-title">Syncing Sector Data...</div>
+                <div class="leaderboard-title">Sector Standings</div>
                 <div id="final-lb-list"></div>
             </div>
 
-            <button class="btn" id="retry-btn">RE-INITIATE</button>
+            <button class="btn" id="retry-btn">RE-START</button>
         `;
         
-        // Quick local render of what we have
         const list = document.getElementById('final-lb-list');
-        list.innerHTML = leaderboardData.slice(0, 3).map((e, i) => `
-            <div class="leaderboard-row"><span class="lb-name">#${i+1} ${e.name}</span><span class="lb-score">${Math.floor(e.score)}</span></div>
+        list.innerHTML = leaderboard.slice(0, 3).map((e, i) => `
+            <div class="leaderboard-row"><span class="lb-name">#${i+1} ${e.name}</span><span class="lb-score">${e.score}</span></div>
         `).join('');
 
-        document.getElementById('retry-btn').onclick = () => location.reload(); // Refresh to ensure state reset
+        document.getElementById('retry-btn').onclick = () => {
+            // Restore original menu content for next play
+            location.reload();
+        };
     }
 
     class Obstacle {
@@ -577,8 +534,9 @@
         player.trail.push({x: player.x, y: player.y});
         if (player.trail.length > 8) player.trail.shift();
 
+        // Phone Friendly spacing
         let minSafeFrames = Math.max(50, 70 - (currentLevel * 1.5)); 
-        if (currentLevel >= 7 && canvas.width < 600) minSafeFrames += 15; 
+        if (canvas.width < 600) minSafeFrames += (currentLevel > 6 ? 20 : 10); 
         
         const spawnThreshold = Math.min(0.035, 0.015 + (currentLevel * 0.002));
         if ((frameCount - lastSpawnFrame) > minSafeFrames && Math.random() < spawnThreshold) {
@@ -629,6 +587,7 @@
     window.addEventListener('keydown', (e) => { 
         if(e.code === 'Space' || e.key === ' ') {
             if (gameActive) { e.preventDefault(); handleJump(); }
+            else if (menu.style.display !== 'none' && !nameInput.matches(':focus')) startGame();
         }
     });
     canvas.addEventListener('touchstart', (e) => {
