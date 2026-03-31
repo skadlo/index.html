@@ -73,7 +73,7 @@
             text-align: center;
             z-index: 10;
             width: 85%;
-            max-width: 360px;
+            max-width: 380px;
             box-shadow: 0 0 50px rgba(0, 255, 255, 0.25);
             border-radius: 28px;
             backdrop-filter: blur(15px);
@@ -99,9 +99,11 @@
         .leaderboard-container {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
-            padding: 10px;
+            padding: 12px;
             margin: 15px 0;
             border: 1px solid rgba(0, 255, 255, 0.2);
+            max-height: 200px;
+            overflow-y: auto;
         }
 
         .leaderboard-title {
@@ -111,19 +113,23 @@
             letter-spacing: 2px;
             margin-bottom: 8px;
             font-weight: bold;
+            position: sticky;
+            top: 0;
+            background: rgba(0,0,0,0.5);
+            padding: 4px;
         }
 
         .score-row {
             display: flex;
             justify-content: space-between;
             font-size: 14px;
-            padding: 4px 0;
+            padding: 6px 0;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .score-row:last-child { border: none; }
-        .score-name { color: #fff; font-weight: 500; }
-        .score-val-small { color: var(--neon-magenta); font-weight: bold; }
+        .score-name { color: #fff; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; text-align: left; }
+        .score-val-small { color: var(--neon-magenta); font-weight: bold; font-family: monospace; }
         
         .rules-box {
             background: rgba(0, 255, 255, 0.05);
@@ -150,6 +156,7 @@
             text-transform: uppercase;
             box-shadow: 0 4px 0 #00cccc;
             transition: all 0.1s;
+            margin-top: 8px;
         }
         
         .btn:active {
@@ -168,7 +175,7 @@
 
 <div id="game-container">
     <div class="stats-left">
-        <div class="label">Current Data</div>
+        <div class="label">Current Run</div>
         <div id="score" class="score-val">0</div>
         <div class="jump-dots" id="jump-indicator">
             <div class="dot"></div>
@@ -178,7 +185,7 @@
     </div>
 
     <div class="stats-right">
-        <div class="label">Personal Best</div>
+        <div class="label">Your Best</div>
         <div id="best" style="font-size: 22px; font-weight: 900; color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta);">0</div>
         <div id="best-name" style="font-size: 11px; opacity: 0.8; margin-top: 2px; font-weight: bold;">---</div>
     </div>
@@ -187,20 +194,20 @@
         <div id="menu-content">
             <h1 style="font-size: 32px; font-weight: 900; color: var(--neon-cyan); margin: 0 0 10px 0; text-shadow: 0 0 20px var(--neon-cyan);">NEON RUNNER</h1>
             
-            <input type="text" id="username" placeholder="RUNNER NAME" maxlength="12">
+            <input type="text" id="username" placeholder="ENTER YOUR NAME" maxlength="12">
 
-            <div class="leaderboard-container">
-                <div class="leaderboard-title">Global Top 5</div>
+            <div class="leaderboard-container" id="leaderboard-box">
+                <div class="leaderboard-title">Global Hall of Fame</div>
                 <div id="global-scores">
-                    <div class="score-row" style="opacity: 0.5; justify-content: center;">Connecting to Matrix...</div>
+                    <div class="score-row" style="opacity: 0.5; justify-content: center;">Initializing Matrix...</div>
                 </div>
             </div>
 
             <div class="rules-box">
                 <strong style="color: var(--neon-cyan);">PROTOCOLS:</strong><br>
-                • Tap to Jump (up to 3x)<br>
-                • Speed increases over time<br>
-                • Avoid Magenta Hazards
+                • Tap to Jump (up to 3x mid-air)<br>
+                • Speed increases as you run<br>
+                • Do not touch Magenta Hazards
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -212,46 +219,66 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, query, onSnapshot, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-    // Firestore Setup (Rules Friendly Paths)
+    // Global variables provided by environment
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'neon-runner-v1';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'neon-runner-v2';
 
     let user = null;
     const globalScoresContainer = document.getElementById('global-scores');
 
-    // Auth & Leaderboard Listener
+    // Cloud Database Setup
     const initCloud = async () => {
-        await signInAnonymously(auth);
-        onAuthStateChanged(auth, (u) => {
-            user = u;
-            if (user) {
-                // RULE: No complex queries or limits for simplicity/speed
-                const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
-                onSnapshot(scoresRef, (snapshot) => {
-                    const allScores = [];
-                    snapshot.forEach(doc => allScores.push(doc.data()));
-                    
-                    // Sort in memory
-                    allScores.sort((a, b) => b.score - a.score);
-                    const top5 = allScores.slice(0, 5);
-
-                    globalScoresContainer.innerHTML = top5.length ? '' : '<div class="score-row">No records found</div>';
-                    top5.forEach(s => {
-                        const row = document.createElement('div');
-                        row.className = 'score-row';
-                        row.innerHTML = `<span class="score-name">${s.name}</span><span class="score-val-small">${Math.floor(s.score)}</span>`;
-                        globalScoresContainer.appendChild(row);
+        try {
+            await signInAnonymously(auth);
+            onAuthStateChanged(auth, (u) => {
+                user = u;
+                if (user) {
+                    // Subscribe to scores
+                    const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                    onSnapshot(scoresRef, (snapshot) => {
+                        const allScores = [];
+                        snapshot.forEach(doc => allScores.push(doc.data()));
+                        
+                        // Sort by score descending and then by time
+                        allScores.sort((a, b) => b.score - a.score);
+                        
+                        // Show Top 10
+                        const top10 = allScores.slice(0, 10);
+                        renderLeaderboard(top10);
+                    }, (err) => {
+                        console.error("Firestore Error:", err);
+                        globalScoresContainer.innerHTML = '<div class="score-row">Network Error</div>';
                     });
-                }, (err) => console.error(err));
-            }
-        });
+                }
+            });
+        } catch (e) {
+            console.error("Auth Error:", e);
+        }
     };
+
+    function renderLeaderboard(scores) {
+        if (!scores.length) {
+            globalScoresContainer.innerHTML = '<div class="score-row" style="justify-content:center">No Data Yet</div>';
+            return;
+        }
+        globalScoresContainer.innerHTML = '';
+        scores.forEach((s, index) => {
+            const row = document.createElement('div');
+            row.className = 'score-row';
+            const crown = index === 0 ? '👑 ' : '';
+            row.innerHTML = `
+                <span class="score-name">${crown}${s.name}</span>
+                <span class="score-val-small">${Math.floor(s.score)}</span>
+            `;
+            globalScoresContainer.appendChild(row);
+        });
+    }
 
     initCloud();
 
@@ -283,9 +310,10 @@
     let animationId = null;
     let runnerName = localStorage.getItem('nr_last_name') || "";
 
+    // Load saved name
+    if(runnerName) nameInput.value = runnerName;
     bestElement.innerText = highScore;
     bestNameElement.innerText = highName.toUpperCase();
-    if(runnerName) nameInput.value = runnerName;
 
     const player = {
         x: 75, y: 0, width: 36, height: 36,
@@ -315,11 +343,11 @@
             player.vy = JUMP_FORCE;
             player.jumpsLeft--;
             updateJumpUI();
-            for(let i=0; i<10; i++) {
+            for(let i=0; i<8; i++) {
                 particles.push({
                     x: player.x + player.width/2, y: player.y + player.height/2,
                     vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
-                    size: Math.random()*5, life: 1, 
+                    size: Math.random()*4, life: 1, 
                     color: player.jumpsLeft === 0 ? '#f0f' : '#0ff'
                 });
             }
@@ -327,24 +355,27 @@
     }
 
     async function submitScore(name, finalScore) {
-        if (!user) return;
+        if (!user || finalScore <= 0) return;
         try {
             const scoreDoc = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', user.uid);
             await setDoc(scoreDoc, {
-                name: name,
+                name: name.substring(0, 12),
                 score: finalScore,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                userId: user.uid
             }, { merge: true });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Cloud Save Fail:", e); }
     }
 
     function startGame() {
         runnerName = nameInput.value.trim() || "Runner";
         localStorage.setItem('nr_last_name', runnerName);
         nameInput.blur();
+        
         score = 0; obstacles = []; particles = [];
         player.vy = 0; player.jumpsLeft = MAX_JUMPS; player.trail = [];
         currentSpeed = 6.5; frameCount = 0;
+        
         menu.style.display = 'none';
         gameActive = true;
         updateJumpUI();
@@ -357,10 +388,8 @@
         cancelAnimationFrame(animationId);
         const finalScore = Math.floor(score);
         
-        // Save to Global Leaderboard
         submitScore(runnerName, finalScore);
         
-        let newBest = false;
         if (finalScore > highScore) {
             highScore = finalScore;
             highName = runnerName;
@@ -368,29 +397,30 @@
             localStorage.setItem('nr_best_name', highName);
             bestElement.innerText = highScore;
             bestNameElement.innerText = highName.toUpperCase();
-            newBest = true;
         }
 
         menu.style.display = 'block';
         menuContent.innerHTML = `
-            <h2 style="color: var(--neon-magenta); margin:0; font-size: 24px;">CONNECTION LOST</h2>
-            <div style="font-size: 50px; font-weight: 900; margin: 5px 0;">${finalScore}</div>
-            <div class="leaderboard-container">
-                <div class="leaderboard-title">Syncing Top Scores...</div>
-                <div id="global-scores-end"></div>
+            <h2 style="color: var(--neon-magenta); margin:0; font-size: 24px;">RUN TERMINATED</h2>
+            <div style="font-size: 54px; font-weight: 900; margin: 10px 0; text-shadow: 0 0 15px var(--neon-magenta);">${finalScore}</div>
+            
+            <div class="leaderboard-container" style="background: rgba(0,0,0,0.3)">
+                <div class="leaderboard-title">Global Rankings</div>
+                <div id="final-scores-list"></div>
             </div>
-            <button class="btn" id="retry-btn">REBOOT</button>
+
+            <button class="btn" id="retry-btn">RETRY RUN</button>
         `;
         
-        // Quick mirror of the leaderboard UI to the game over screen
-        document.getElementById('global-scores-end').innerHTML = globalScoresContainer.innerHTML;
+        // Populate the list from the live data we already have
+        document.getElementById('final-scores-list').innerHTML = globalScoresContainer.innerHTML;
         document.getElementById('retry-btn').onclick = () => location.reload();
     }
 
     class Obstacle {
         constructor() {
             this.width = 25 + Math.random() * 30;
-            this.height = 40 + Math.random() * Math.min(110, 45 + currentSpeed * 2.5);
+            this.height = 40 + Math.random() * Math.min(120, 45 + currentSpeed * 2.5);
             this.x = canvas.width + 100;
             this.y = canvas.height - GROUND_HEIGHT - this.height;
         }
@@ -401,6 +431,7 @@
             ctx.fillRect(this.x, this.y, this.width, this.height);
             ctx.shadowBlur = 0;
             ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
             ctx.strokeRect(this.x+3, this.y+3, this.width-6, this.height-6);
         }
     }
@@ -408,11 +439,21 @@
     function drawBG() {
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
-        ctx.shadowBlur = 12; ctx.shadowColor = '#0ff';
+        
+        // Ground line
+        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
+        ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
         ctx.beginPath(); ctx.moveTo(0, canvas.height - GROUND_HEIGHT); 
         ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); ctx.stroke();
         ctx.shadowBlur = 0;
+
+        // Grid lines for depth
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        for(let i=0; i<10; i++) {
+            let y = canvas.height - GROUND_HEIGHT + (i * 20);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
     }
 
     function loop() {
@@ -420,45 +461,64 @@
         frameCount++;
         score += 0.15;
         scoreElement.innerText = Math.floor(score);
-        if (frameCount % 480 === 0) currentSpeed += 0.25;
+        
+        if (frameCount % 600 === 0) currentSpeed += 0.3;
+        
         player.vy += GRAVITY; player.y += player.vy;
         const floorPos = canvas.height - GROUND_HEIGHT - player.height;
         if (player.y > floorPos) { 
             player.y = floorPos; player.vy = 0; 
-            if (player.jumpsLeft < MAX_JUMPS) { player.jumpsLeft = MAX_JUMPS; updateJumpUI(); }
+            if (player.jumpsLeft < MAX_JUMPS) { 
+                player.jumpsLeft = MAX_JUMPS; 
+                updateJumpUI(); 
+            }
         }
+        
         player.trail.push({x: player.x, y: player.y});
-        if (player.trail.length > 7) player.trail.shift();
-        const spawnRate = Math.max(38, 95 - (currentSpeed * 3.5));
+        if (player.trail.length > 8) player.trail.shift();
+
+        const spawnRate = Math.max(35, 100 - (currentSpeed * 4));
         if (frameCount % Math.floor(spawnRate) === 0) obstacles.push(new Obstacle());
+
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obs = obstacles[i]; obs.update();
-            if (player.x < obs.x + obs.width && player.x + player.width > obs.x && 
-                player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+            if (player.x < obs.x + obs.width - 5 && player.x + player.width > obs.x + 5 && 
+                player.y < obs.y + obs.height - 5 && player.y + player.height > obs.y + 5) {
                 gameOver(); return;
             }
-            if (obs.x + obs.width < -60) obstacles.splice(i, 1);
+            if (obs.x + obs.width < -100) obstacles.splice(i, 1);
         }
+
         drawBG();
+
+        // Trail
         player.trail.forEach((pos, i) => {
             ctx.fillStyle = `rgba(0, 255, 255, ${i * 0.04})`;
             ctx.fillRect(pos.x, pos.y, player.width, player.height);
         });
-        ctx.fillStyle = '#0ff'; ctx.shadowBlur = 18; ctx.shadowColor = '#0ff';
+
+        // Player
+        ctx.fillStyle = '#0ff'; ctx.shadowBlur = 20; ctx.shadowColor = '#0ff';
         ctx.fillRect(player.x, player.y, player.width, player.height);
         ctx.shadowBlur = 0;
+
         obstacles.forEach(obs => obs.draw());
+
+        // Particles
         for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.035;
+            const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.04;
             if (p.life <= 0) particles.splice(i, 1);
             ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
             ctx.fillRect(p.x, p.y, p.size, p.size);
         }
         ctx.globalAlpha = 1;
+
         animationId = requestAnimationFrame(loop);
     }
 
     startBtn.onclick = startGame;
+    
+    // Controls
     window.addEventListener('keydown', (e) => { 
         if(e.code === 'Space' || e.key === ' ') {
             if (gameActive) { e.preventDefault(); handleJump(); }
