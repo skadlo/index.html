@@ -10,7 +10,7 @@
         :root {
             --neon-cyan: #0ff;
             --neon-magenta: #f0f;
-            --glass: rgba(0, 0, 0, 0.9);
+            --glass: rgba(0, 0, 0, 0.85);
         }
         
         body {
@@ -33,18 +33,13 @@
             left: 0;
             width: 100%;
             height: 100%;
-            display: flex;
-            flex-direction: column;
         }
         
         canvas {
             display: block;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
         }
 
+        /* Top Left - Session Info */
         .stats-left {
             position: absolute;
             top: 20px;
@@ -53,6 +48,7 @@
             z-index: 5;
         }
 
+        /* Top Right - Persistent Scoreboard & Velocity */
         .stats-right {
             position: absolute;
             top: 20px;
@@ -61,7 +57,7 @@
             pointer-events: none;
             z-index: 5;
             background: rgba(0, 255, 255, 0.1);
-            padding: 10px 15px;
+            padding: 12px 18px;
             border-radius: 12px;
             border: 1px solid rgba(0, 255, 255, 0.3);
             backdrop-filter: blur(8px);
@@ -74,93 +70,57 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: var(--glass);
-            padding: 25px;
+            padding: 30px;
             border: 2px solid var(--neon-cyan);
             text-align: center;
-            z-index: 9999; /* Max priority */
+            z-index: 10;
             width: 85%;
-            max-width: 380px;
-            box-shadow: 0 0 50px rgba(0, 255, 255, 0.3);
+            max-width: 340px;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.25);
             border-radius: 28px;
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
-            max-height: 90vh;
-            overflow-y: auto;
-            display: block; /* Always visible initially */
         }
         
         input {
             background: #111;
             border: 1px solid var(--neon-cyan);
             color: var(--neon-cyan);
-            padding: 12px;
-            margin-bottom: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
             width: 100%;
             text-align: center;
             box-sizing: border-box;
             border-radius: 12px;
-            font-size: 16px;
+            font-size: 18px;
             outline: none;
         }
-
-        .leaderboard-container {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 12px;
-            margin: 15px 0;
-            border: 1px solid rgba(0, 255, 255, 0.2);
-            max-height: 180px;
-            overflow-y: auto;
-        }
-
-        .leaderboard-title {
-            font-size: 12px;
-            text-transform: uppercase;
-            color: var(--neon-cyan);
-            letter-spacing: 2px;
-            margin-bottom: 8px;
-            font-weight: bold;
-        }
-
-        .score-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .score-row:last-child { border: none; }
-        .score-name { color: #fff; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; text-align: left; }
-        .score-val-small { color: var(--neon-magenta); font-weight: bold; font-family: monospace; }
         
         .rules-box {
             background: rgba(0, 255, 255, 0.05);
-            padding: 12px;
-            margin-bottom: 15px;
+            padding: 15px;
+            margin: 15px 0 25px 0;
             text-align: left;
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             border-radius: 12px;
             border-left: 4px solid var(--neon-cyan);
-            line-height: 1.4;
-            color: #ccc;
+            line-height: 1.6;
+            color: #ddd;
         }
 
         .btn {
             background: var(--neon-cyan);
             color: #000;
-            padding: 18px;
+            padding: 20px;
             border: none;
             border-radius: 16px;
             font-weight: 900;
             cursor: pointer;
             width: 100%;
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             text-transform: uppercase;
             box-shadow: 0 4px 0 #00cccc;
             transition: all 0.1s;
-            margin-top: 8px;
-            display: block;
         }
         
         .btn:active {
@@ -171,6 +131,13 @@
         .score-val { font-size: 32px; font-weight: 900; text-shadow: 0 0 10px var(--neon-cyan); }
         .label { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--neon-cyan); opacity: 0.8; }
         
+        .velocity-container {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+        }
+        #velocity-val { color: var(--neon-magenta); font-weight: bold; font-size: 16px; font-family: monospace; }
+
         .jump-dots { display: flex; gap: 8px; margin-top: 10px; }
         .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); transition: 0.2s; }
     </style>
@@ -179,7 +146,7 @@
 
 <div id="game-container">
     <div class="stats-left">
-        <div class="label">Current Run</div>
+        <div class="label">Current Score</div>
         <div id="score" class="score-val">0</div>
         <div class="jump-dots" id="jump-indicator">
             <div class="dot"></div>
@@ -192,26 +159,24 @@
         <div class="label">Personal Best</div>
         <div id="best" style="font-size: 22px; font-weight: 900; color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta);">0</div>
         <div id="best-name" style="font-size: 11px; opacity: 0.8; margin-top: 2px; font-weight: bold;">---</div>
+        
+        <div class="velocity-container">
+            <div class="label">System Velocity</div>
+            <div id="velocity-val">0.00x</div>
+        </div>
     </div>
 
     <div id="menu">
         <div id="menu-content">
-            <h1 style="font-size: 32px; font-weight: 900; color: var(--neon-cyan); margin: 0 0 10px 0; text-shadow: 0 0 20px var(--neon-cyan);">NEON RUNNER</h1>
+            <h1 style="font-size: 38px; font-weight: 900; color: var(--neon-cyan); margin: 0 0 15px 0; text-shadow: 0 0 20px var(--neon-cyan);">NEON RUNNER</h1>
             
-            <input type="text" id="username" placeholder="ENTER PLAYER NAME" maxlength="12">
-
-            <div class="leaderboard-container">
-                <div class="leaderboard-title">Local Top Scores</div>
-                <div id="local-scores">
-                    <div class="score-row" style="opacity: 0.5; justify-content: center;">Scanning records...</div>
-                </div>
-            </div>
+            <input type="text" id="username" placeholder="RUNNER NAME" maxlength="12">
 
             <div class="rules-box">
-                <strong style="color: var(--neon-cyan);">PROTOCOLS:</strong><br>
-                • Tap or Space to Jump (3x mid-air)<br>
-                • Avoid Magenta Hazards<br>
-                • Speed increases over time
+                <strong style="color: var(--neon-cyan); letter-spacing: 1px;">LOGICAL ENGINE:</strong><br>
+                • Spacing scales with Velocity<br>
+                • Triple Jump (3x) authorized<br>
+                • Speed increases every 150 frames
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -222,296 +187,239 @@
 </div>
 
 <script>
-    // --- STORAGE LOGIC ---
-    const STORAGE_KEY = 'neon_runner_local_v3';
-    
-    function getLocalScores() {
-        try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
-        } catch(e) { return []; }
-    }
+    const init = () => {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const bestElement = document.getElementById('best');
+        const bestNameElement = document.getElementById('best-name');
+        const velocityElement = document.getElementById('velocity-val');
+        const jumpDots = document.getElementById('jump-indicator').children;
+        const menu = document.getElementById('menu');
+        const menuContent = document.getElementById('menu-content');
+        const startBtn = document.getElementById('start-btn');
+        const nameInput = document.getElementById('username');
 
-    function saveLocalScore(name, score) {
-        let scores = getLocalScores();
-        scores.push({ name, score: Math.floor(score), date: Date.now() });
-        scores.sort((a, b) => b.score - a.score);
-        scores = scores.slice(0, 10);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
-        renderLeaderboard();
-    }
+        const GRAVITY = 0.65;
+        const JUMP_FORCE = -11.8; 
+        const GROUND_HEIGHT = 80;
+        const MAX_JUMPS = 3; 
 
-    function renderLeaderboard() {
-        const container = document.getElementById('local-scores');
-        if (!container) return;
-        const scores = getLocalScores();
-        if (scores.length === 0) {
-            container.innerHTML = '<div class="score-row" style="justify-content: center; opacity: 0.5;">No history found</div>';
-            return;
-        }
-        container.innerHTML = '';
-        scores.forEach((s, i) => {
-            const row = document.createElement('div');
-            row.className = 'score-row';
-            row.innerHTML = `
-                <span class="score-name">${i === 0 ? '👑 ' : ''}${s.name}</span>
-                <span class="score-val-small">${s.score}</span>
-            `;
-            container.appendChild(row);
-        });
+        let gameActive = false;
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('nr_best_val')) || 0;
+        let highName = localStorage.getItem('nr_best_name') || "---";
+        let obstacles = [];
+        let particles = [];
+        let frameCount = 0;
+        let lastSpawnFrame = 0;
+        let baseSpeed = 7.0; 
+        let currentSpeed = baseSpeed;
+        let animationId = null;
+        let runnerName = localStorage.getItem('nr_last_name') || "";
 
-        if (scores.length > 0) {
-            document.getElementById('best').innerText = scores[0].score;
-            document.getElementById('best-name').innerText = scores[0].name.toUpperCase();
-        }
-    }
+        bestElement.innerText = highScore;
+        bestNameElement.innerText = highName.toUpperCase();
+        if(runnerName) nameInput.value = runnerName;
+        velocityElement.innerText = `${currentSpeed.toFixed(2)}x`;
 
-    // --- GAME ENGINE ---
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreElement = document.getElementById('score');
-    const menu = document.getElementById('menu');
-    const startBtn = document.getElementById('start-btn');
-    const nameInput = document.getElementById('username');
-    const jumpDots = document.getElementById('jump-indicator').children;
+        const player = {
+            x: 75, y: 0, width: 36, height: 36,
+            vy: 0, jumpsLeft: MAX_JUMPS, trail: []
+        };
 
-    const GRAVITY = 0.65;
-    const JUMP_FORCE = -12; 
-    const GROUND_HEIGHT = 80;
-    const MAX_JUMPS = 3; 
-
-    let gameActive = false;
-    let score = 0;
-    let obstacles = [];
-    let particles = [];
-    let frameCount = 0;
-    let currentSpeed = 7; 
-    let animationId = null;
-
-    const player = {
-        x: 70, y: 0, width: 34, height: 34,
-        vy: 0, jumpsLeft: MAX_JUMPS, trail: []
-    };
-
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        player.y = canvas.height - GROUND_HEIGHT - player.height;
-        if(!gameActive) drawStaticBG();
-    }
-
-    function updateJumpUI() {
-        for(let i = 0; i < MAX_JUMPS; i++) {
-            const isActive = i < player.jumpsLeft;
-            jumpDots[i].style.opacity = isActive ? "1" : "0.1";
-            jumpDots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
-            jumpDots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
-        }
-    }
-
-    function handleJump() {
-        if (!gameActive) return;
-        if (player.jumpsLeft > 0) {
-            player.vy = JUMP_FORCE;
-            player.jumpsLeft--;
-            updateJumpUI();
-            for(let i=0; i<6; i++) {
-                particles.push({
-                    x: player.x + player.width/2, y: player.y + player.height/2,
-                    vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8,
-                    size: Math.random()*3 + 1, life: 1, 
-                    color: player.jumpsLeft === 0 ? '#f0f' : '#0ff'
-                });
-            }
-        }
-    }
-
-    function startGame(e) {
-        if(e) e.preventDefault();
-        
-        const name = nameInput.value.trim() || "RUNNER";
-        localStorage.setItem('last_neon_name', name);
-        
-        score = 0; 
-        obstacles = []; 
-        particles = [];
-        player.vy = 0; 
-        player.jumpsLeft = MAX_JUMPS; 
-        player.trail = [];
-        currentSpeed = 7; 
-        frameCount = 0;
-        
-        menu.style.display = 'none';
-        gameActive = true;
-        updateJumpUI();
-        
-        if (animationId) cancelAnimationFrame(animationId);
-        loop();
-    }
-
-    function gameOver() {
-        gameActive = false;
-        cancelAnimationFrame(animationId);
-        
-        const finalScore = Math.floor(score);
-        const name = nameInput.value.trim() || "RUNNER";
-        saveLocalScore(name, finalScore);
-
-        menu.style.display = 'block';
-        const scores = getLocalScores();
-        
-        document.getElementById('menu-content').innerHTML = `
-            <h2 style="color: var(--neon-magenta); margin:0; font-size: 24px;">RUN TERMINATED</h2>
-            <div style="font-size: 54px; font-weight: 900; margin: 10px 0; text-shadow: 0 0 15px var(--neon-magenta);">${finalScore}</div>
-            
-            <div class="leaderboard-container">
-                <div class="leaderboard-title">Top Scores</div>
-                <div id="retry-scores"></div>
-            </div>
-
-            <button class="btn" id="retry-btn">RE-INITIALIZE</button>
-        `;
-        
-        const retryList = document.getElementById('retry-scores');
-        scores.slice(0, 5).forEach((s, i) => {
-            retryList.innerHTML += `
-                <div class="score-row">
-                    <span class="score-name">${i === 0 ? '👑 ' : ''}${s.name}</span>
-                    <span class="score-val-small">${s.score}</span>
-                </div>
-            `;
-        });
-
-        document.getElementById('retry-btn').onclick = () => location.reload();
-    }
-
-    class Obstacle {
-        constructor() {
-            this.width = 28 + Math.random() * 25;
-            this.height = 35 + Math.random() * 55;
-            this.x = canvas.width + 100;
-            this.y = canvas.height - GROUND_HEIGHT - this.height;
-        }
-        update() { this.x -= currentSpeed; }
-        draw() {
-            ctx.fillStyle = '#f0f';
-            ctx.shadowBlur = 15; ctx.shadowColor = '#f0f';
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(this.x+2, this.y+2, this.width-4, this.height-4);
-        }
-    }
-
-    function drawStaticBG() {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 4;
-        ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
-        ctx.beginPath(); 
-        ctx.moveTo(0, canvas.height - GROUND_HEIGHT); 
-        ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); 
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-    }
-
-    function loop() {
-        if (!gameActive) return;
-        frameCount++;
-        score += 0.15;
-        scoreElement.innerText = Math.floor(score);
-        
-        if (frameCount % 800 === 0) currentSpeed += 0.4;
-        
-        player.vy += GRAVITY; 
-        player.y += player.vy;
-        
-        const floorPos = canvas.height - GROUND_HEIGHT - player.height;
-        if (player.y > floorPos) { 
-            player.y = floorPos; 
-            player.vy = 0; 
-            if (player.jumpsLeft < MAX_JUMPS) { 
-                player.jumpsLeft = MAX_JUMPS; 
-                updateJumpUI(); 
-            }
-        }
-        
-        player.trail.push({x: player.x, y: player.y});
-        if (player.trail.length > 6) player.trail.shift();
-
-        const spawnRate = Math.max(40, 110 - (currentSpeed * 4.5));
-        if (frameCount % Math.floor(spawnRate) === 0) obstacles.push(new Obstacle());
-
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-            const obs = obstacles[i]; 
-            obs.update();
-            if (player.x < obs.x + obs.width - 4 && player.x + player.width > obs.x + 4 && 
-                player.y < obs.y + obs.height - 4 && player.y + player.height > obs.y + 4) {
-                gameOver(); return;
-            }
-            if (obs.x + obs.width < -100) obstacles.splice(i, 1);
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.y = canvas.height - GROUND_HEIGHT - player.height;
+            drawStaticBackground();
         }
 
-        drawStaticBG();
-
-        player.trail.forEach((pos, i) => {
-            ctx.fillStyle = `rgba(0, 255, 255, ${i * 0.05})`;
-            ctx.fillRect(pos.x, pos.y, player.width, player.height);
-        });
-
-        ctx.fillStyle = '#0ff'; ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
-        ctx.fillRect(player.x, player.y, player.width, player.height);
-        ctx.shadowBlur = 0;
-
-        obstacles.forEach(obs => obs.draw());
-
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
-            if (p.life <= 0) particles.splice(i, 1);
-            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-        }
-        ctx.globalAlpha = 1;
-
-        animationId = requestAnimationFrame(loop);
-    }
-
-    // --- INITIALIZATION ---
-    function init() {
+        window.addEventListener('resize', resize);
         resize();
-        renderLeaderboard();
-        const savedName = localStorage.getItem('last_neon_name');
-        if (savedName) nameInput.value = savedName;
-        
-        // Force visual update
-        drawStaticBG();
-    }
 
-    // Attempt double init to be sure
-    if (document.readyState === 'complete') {
-        init();
-    } else {
-        window.addEventListener('load', init);
-    }
-
-    window.addEventListener('resize', resize);
-    
-    // Explicit click and touch for the button
-    startBtn.onclick = startGame;
-    startBtn.ontouchend = startGame;
-    
-    window.addEventListener('keydown', (e) => { 
-        if(e.code === 'Space' || e.key === ' ') {
-            if (gameActive) { e.preventDefault(); handleJump(); }
-            else if (menu.style.display !== 'none' && !nameInput.matches(':focus')) startGame();
+        function updateJumpUI() {
+            for(let i = 0; i < MAX_JUMPS; i++) {
+                const isActive = i < player.jumpsLeft;
+                jumpDots[i].style.opacity = isActive ? "1" : "0.15";
+                jumpDots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
+                jumpDots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
+            }
         }
-    });
 
-    canvas.addEventListener('touchstart', (e) => {
-        if (gameActive) { e.preventDefault(); handleJump(); }
-    }, {passive: false});
+        function handleJump() {
+            if (!gameActive) return;
+            if (player.jumpsLeft > 0) {
+                player.vy = JUMP_FORCE;
+                player.jumpsLeft--;
+                updateJumpUI();
+                for(let i=0; i<10; i++) {
+                    particles.push({
+                        x: player.x + player.width/2, y: player.y + player.height/2,
+                        vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                        size: Math.random()*5, life: 1, color: player.jumpsLeft === 0 ? '#f0f' : '#0ff'
+                    });
+                }
+            }
+        }
 
+        function startGame() {
+            runnerName = nameInput.value.trim() || "Runner";
+            localStorage.setItem('nr_last_name', runnerName);
+            nameInput.blur();
+            score = 0;
+            obstacles = [];
+            particles = [];
+            player.vy = 0;
+            player.jumpsLeft = MAX_JUMPS;
+            player.trail = [];
+            currentSpeed = baseSpeed; 
+            frameCount = 0;
+            lastSpawnFrame = 0;
+            menu.style.display = 'none';
+            gameActive = true;
+            updateJumpUI();
+            if (animationId) cancelAnimationFrame(animationId);
+            loop();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            cancelAnimationFrame(animationId);
+            const finalScore = Math.floor(score);
+            let newBest = false;
+            if (finalScore > highScore) {
+                highScore = finalScore;
+                highName = runnerName;
+                localStorage.setItem('nr_best_val', highScore);
+                localStorage.setItem('nr_best_name', highName);
+                bestElement.innerText = highScore;
+                bestNameElement.innerText = highName.toUpperCase();
+                newBest = true;
+            }
+            menu.style.display = 'block';
+            menuContent.innerHTML = `
+                <h2 style="color: var(--neon-magenta); margin:0; font-size: 28px;">FAILURE</h2>
+                <div style="font-size: 60px; font-weight: 900; margin: 10px 0;">${finalScore}</div>
+                ${newBest ? '<div style="color:var(--neon-cyan); font-weight:bold; margin-bottom:15px;">NEW BEST!</div>' : ''}
+                <button class="btn" id="retry-btn">RETRY</button>
+            `;
+            document.getElementById('retry-btn').onclick = () => startGame();
+        }
+
+        class Obstacle {
+            constructor() {
+                this.width = 30 + Math.random() * 30;
+                // Height logic: Avoid impossible heights at extreme speeds
+                const maxHeight = Math.min(110, 45 + currentSpeed * 3);
+                this.height = 40 + Math.random() * maxHeight;
+                this.x = canvas.width + 100;
+                this.y = canvas.height - GROUND_HEIGHT - this.height;
+            }
+            update() { this.x -= currentSpeed; }
+            draw() {
+                ctx.fillStyle = '#f0f';
+                ctx.shadowBlur = 10; ctx.shadowColor = '#f0f';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x+3, this.y+3, this.width-6, this.height-6);
+            }
+        }
+
+        function drawStaticBackground() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
+            ctx.shadowBlur = 12; ctx.shadowColor = '#0ff';
+            ctx.beginPath(); ctx.moveTo(0, canvas.height - GROUND_HEIGHT); 
+            ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!gameActive) return;
+            frameCount++;
+            score += (currentSpeed / 60);
+            scoreElement.innerText = Math.floor(score);
+            
+            // Scaled speed progression
+            if (frameCount % 150 === 0) {
+                currentSpeed += 0.45;
+                velocityElement.innerText = `${currentSpeed.toFixed(2)}x`;
+            }
+
+            // Physics
+            player.vy += GRAVITY;
+            player.y += player.vy;
+            const floorPos = canvas.height - GROUND_HEIGHT - player.height;
+            if (player.y > floorPos) { 
+                player.y = floorPos; 
+                player.vy = 0; 
+                if (player.jumpsLeft < MAX_JUMPS) {
+                    player.jumpsLeft = MAX_JUMPS; 
+                    updateJumpUI();
+                }
+            }
+
+            player.trail.push({x: player.x, y: player.y});
+            if (player.trail.length > 8) player.trail.shift();
+
+            // --- LOGICAL SPACING ENGINE ---
+            // Calculate minimum safe distance: Speed * (Time to jump + buffer)
+            // This ensures obstacles aren't closer than a physical jump window.
+            const minSafeFrames = 45; // Minimum frames between spawns for safety
+            const framesSinceLast = frameCount - lastSpawnFrame;
+            const dynamicSpawnChance = 0.02 + (currentSpeed / 1000);
+
+            if (framesSinceLast > minSafeFrames && Math.random() < dynamicSpawnChance) {
+                obstacles.push(new Obstacle());
+                lastSpawnFrame = frameCount;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.update();
+                if (player.x < obs.x + obs.width && player.x + player.width > obs.x && 
+                    player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+                    gameOver(); return;
+                }
+                if (obs.x + obs.width < -100) obstacles.splice(i, 1);
+            }
+
+            drawStaticBackground();
+            player.trail.forEach((pos, i) => {
+                ctx.fillStyle = `rgba(0, 255, 255, ${i * 0.04})`;
+                ctx.fillRect(pos.x, pos.y, player.width, player.height);
+            });
+            ctx.fillStyle = '#0ff'; ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.shadowBlur = 0;
+            obstacles.forEach(obs => obs.draw());
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.life -= 0.035;
+                if (p.life <= 0) particles.splice(i, 1);
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            }
+            ctx.globalAlpha = 1;
+            animationId = requestAnimationFrame(loop);
+        }
+
+        startBtn.onclick = startGame;
+        window.addEventListener('keydown', (e) => { 
+            if(e.code === 'Space' || e.key === ' ') {
+                if (gameActive) { e.preventDefault(); handleJump(); }
+                else if (menu.style.display !== 'none' && !nameInput.matches(':focus')) startGame();
+            }
+        });
+        canvas.addEventListener('touchstart', (e) => {
+            if (gameActive) { e.preventDefault(); handleJump(); }
+        }, {passive: false});
+    };
+    window.onload = init;
 </script>
 </body>
 </html>
