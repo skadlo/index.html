@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Neon Runner</title>
+    <style>
+        :root {
+            --neon-cyan: #0ff;
+            --neon-magenta: #f0f;
+            --glass: rgba(0, 0, 0, 0.85);
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none; 
+            color: white;
+            width: 100vw;
+            height: 100vh;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        canvas {
+            display: block;
+        }
+
+        /* Top Left - Session Info */
+        .stats-left {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Top Right - Persistent Scoreboard */
+        .stats-right {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            pointer-events: none;
+            z-index: 5;
+            background: rgba(0, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        
+        #menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--glass);
+            padding: 30px;
+            border: 2px solid var(--neon-cyan);
+            text-align: center;
+            z-index: 10;
+            width: 85%;
+            max-width: 340px;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.25);
+            border-radius: 28px;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+        }
+        
+        input {
+            background: #111;
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            padding: 15px;
+            margin-bottom: 15px;
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+            border-radius: 12px;
+            font-size: 18px;
+            outline: none;
+        }
+        
+        .rules-box {
+            background: rgba(0, 255, 255, 0.05);
+            padding: 15px;
+            margin: 15px 0 25px 0;
+            text-align: left;
+            font-size: 0.85rem;
+            border-radius: 12px;
+            border-left: 4px solid var(--neon-cyan);
+            line-height: 1.6;
+            color: #ddd;
+        }
+
+        .btn {
+            background: var(--neon-cyan);
+            color: #000;
+            padding: 20px;
+            border: none;
+            border-radius: 16px;
+            font-weight: 900;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.3rem;
+            text-transform: uppercase;
+            box-shadow: 0 4px 0 #00cccc;
+            transition: all 0.1s;
+        }
+        
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #00cccc;
+        }
+
+        .score-val { font-size: 32px; font-weight: 900; text-shadow: 0 0 10px var(--neon-cyan); }
+        .label { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--neon-cyan); opacity: 0.8; }
+        
+        .jump-dots { display: flex; gap: 8px; margin-top: 10px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); transition: 0.2s; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- Session Stats -->
+    <div class="stats-left">
+        <div class="label">Current Data</div>
+        <div id="score" class="score-val">0</div>
+        <div class="jump-dots" id="jump-indicator">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+    </div>
+
+    <!-- Persistent Scoreboard -->
+    <div class="stats-right">
+        <div class="label">Personal Best</div>
+        <div id="best" style="font-size: 22px; font-weight: 900; color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta);">0</div>
+        <div id="best-name" style="font-size: 11px; opacity: 0.8; margin-top: 2px; font-weight: bold;">---</div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="menu">
+        <div id="menu-content">
+            <h1 style="font-size: 38px; font-weight: 900; color: var(--neon-cyan); margin: 0 0 15px 0; text-shadow: 0 0 20px var(--neon-cyan);">NEON RUNNER</h1>
+            
+            <input type="text" id="username" placeholder="RUNNER NAME" maxlength="12">
+
+            <div class="rules-box">
+                <strong style="color: var(--neon-cyan); letter-spacing: 1px;">INSTRUCTIONS:</strong><br>
+                • Tap anywhere to Jump<br>
+                • Triple Jump (3x) authorized<br>
+                • Gravity & Speed increase over time<br>
+                • Avoid Magenta Protocols
+            </div>
+
+            <button class="btn" id="start-btn">INITIATE RUN</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    /**
+     * NEON RUNNER - CORE ENGINE
+     */
+    const init = () => {
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const bestElement = document.getElementById('best');
+        const bestNameElement = document.getElementById('best-name');
+        const jumpDots = document.getElementById('jump-indicator').children;
+        const menu = document.getElementById('menu');
+        const menuContent = document.getElementById('menu-content');
+        const startBtn = document.getElementById('start-btn');
+        const nameInput = document.getElementById('username');
+
+        // Physics Constants
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -11.5; 
+        const GROUND_HEIGHT = 80;
+        const MAX_JUMPS = 3; 
+
+        // State Variables
+        let gameActive = false;
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('nr_best_val')) || 0;
+        let highName = localStorage.getItem('nr_best_name') || "---";
+        let obstacles = [];
+        let particles = [];
+        let frameCount = 0;
+        let currentSpeed = 6.5; 
+        let animationId = null;
+        let runnerName = localStorage.getItem('nr_last_name') || "";
+
+        // UI Initialization
+        bestElement.innerText = highScore;
+        bestNameElement.innerText = highName.toUpperCase();
+        if(runnerName) nameInput.value = runnerName;
+
+        const player = {
+            x: 75, y: 0, width: 36, height: 36,
+            vy: 0, jumpsLeft: MAX_JUMPS, trail: []
+        };
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.y = canvas.height - GROUND_HEIGHT - player.height;
+            drawStaticBackground();
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        function updateJumpUI() {
+            for(let i = 0; i < MAX_JUMPS; i++) {
+                const isActive = i < player.jumpsLeft;
+                jumpDots[i].style.opacity = isActive ? "1" : "0.15";
+                jumpDots[i].style.transform = isActive ? "scale(1)" : "scale(0.8)";
+                jumpDots[i].style.background = (player.jumpsLeft === 1 && isActive) ? "var(--neon-magenta)" : "var(--neon-cyan)";
+            }
+        }
+
+        function handleJump() {
+            if (!gameActive) return;
+            if (player.jumpsLeft > 0) {
+                player.vy = JUMP_FORCE;
+                player.jumpsLeft--;
+                updateJumpUI();
+                
+                // Burst effect
+                for(let i=0; i<10; i++) {
+                    particles.push({
+                        x: player.x + player.width/2, 
+                        y: player.y + player.height/2,
+                        vx: (Math.random()-0.5)*10, 
+                        vy: (Math.random()-0.5)*10,
+                        size: Math.random()*5, 
+                        life: 1, 
+                        color: player.jumpsLeft === 0 ? '#f0f' : '#0ff'
+                    });
+                }
+            }
+        }
+
+        function startGame() {
+            runnerName = nameInput.value.trim() || "Runner";
+            localStorage.setItem('nr_last_name', runnerName);
+            nameInput.blur(); // Dismiss mobile keyboard
+            
+            score = 0;
+            obstacles = [];
+            particles = [];
+            player.vy = 0;
+            player.jumpsLeft = MAX_JUMPS;
+            player.trail = [];
+            currentSpeed = 6.5; 
+            frameCount = 0;
+            
+            menu.style.display = 'none';
+            gameActive = true;
+            updateJumpUI();
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            loop();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            cancelAnimationFrame(animationId);
+            
+            const finalScore = Math.floor(score);
+            let newBest = false;
+            
+            if (finalScore > highScore) {
+                highScore = finalScore;
+                highName = runnerName;
+                localStorage.setItem('nr_best_val', highScore);
+                localStorage.setItem('nr_best_name', highName);
+                bestElement.innerText = highScore;
+                bestNameElement.innerText = highName.toUpperCase();
+                newBest = true;
+            }
+
+            menu.style.display = 'block';
+            menuContent.innerHTML = `
+                <h2 style="color: var(--neon-magenta); margin:0; font-size: 28px;">CRITICAL ERROR</h2>
+                <div style="font-size: 60px; font-weight: 900; margin: 10px 0; text-shadow: 0 0 15px rgba(255,255,255,0.2);">${finalScore}</div>
+                ${newBest ? '<div style="color:var(--neon-cyan); font-weight:bold; margin-bottom:15px; letter-spacing:1px;">NEW SECTOR RECORD!</div>' : ''}
+                <button class="btn" id="retry-btn">REBOOT SYSTEM</button>
+            `;
+            
+            document.getElementById('retry-btn').onclick = () => location.reload();
+        }
+
+        class Obstacle {
+            constructor() {
+                this.width = 25 + Math.random() * 30;
+                // Height increases slightly as difficulty scales
+                const heightLimit = Math.min(110, 45 + currentSpeed * 2.5);
+                this.height = 40 + Math.random() * heightLimit;
+                this.x = canvas.width + 100;
+                this.y = canvas.height - GROUND_HEIGHT - this.height;
+            }
+            update() { this.x -= currentSpeed; }
+            draw() {
+                ctx.fillStyle = '#f0f';
+                ctx.shadowBlur = 15; ctx.shadowColor = '#f0f';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x+3, this.y+3, this.width-6, this.height-6);
+            }
+        }
+
+        function drawStaticBackground() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Neon Ground
+            ctx.strokeStyle = '#0ff'; 
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 12; ctx.shadowColor = '#0ff';
+            ctx.beginPath(); 
+            ctx.moveTo(0, canvas.height - GROUND_HEIGHT); 
+            ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); 
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!gameActive) return;
+
+            frameCount++;
+            score += 0.15;
+            scoreElement.innerText = Math.floor(score);
+            
+            // GRADUAL DIFFICULTY
+            // Increase speed every 8 seconds (roughly 480 frames)
+            if (frameCount % 480 === 0) {
+                currentSpeed += 0.25;
+            }
+
+            // Gravity & Movement
+            player.vy += GRAVITY;
+            player.y += player.vy;
+            const floorPos = canvas.height - GROUND_HEIGHT - player.height;
+            
+            if (player.y > floorPos) { 
+                player.y = floorPos; 
+                player.vy = 0; 
+                if (player.jumpsLeft < MAX_JUMPS) {
+                    player.jumpsLeft = MAX_JUMPS; 
+                    updateJumpUI();
+                }
+            }
+
+            // Visual Trail
+            player.trail.push({x: player.x, y: player.y});
+            if (player.trail.length > 7) player.trail.shift();
+
+            // Dynamic Spawning
+            const spawnRate = Math.max(38, 95 - (currentSpeed * 3.5));
+            if (frameCount % Math.floor(spawnRate) === 0) {
+                obstacles.push(new Obstacle());
+            }
+
+            // Update Obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.update();
+                
+                // Collision Detection
+                if (player.x < obs.x + obs.width && 
+                    player.x + player.width > obs.x && 
+                    player.y < obs.y + obs.height && 
+                    player.y + player.height > obs.y) {
+                    gameOver();
+                    return;
+                }
+                if (obs.x + obs.width < -60) obstacles.splice(i, 1);
+            }
+
+            // Rendering
+            drawStaticBackground();
+
+            // Trail Render
+            player.trail.forEach((pos, i) => {
+                ctx.fillStyle = `rgba(0, 255, 255, ${i * 0.04})`;
+                ctx.fillRect(pos.x, pos.y, player.width, player.height);
+            });
+
+            // Player Render
+            ctx.fillStyle = '#0ff';
+            ctx.shadowBlur = 18; ctx.shadowColor = '#0ff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.shadowBlur = 0;
+
+            // Obstacles Render
+            obstacles.forEach(obs => obs.draw());
+
+            // Particles Render
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.life -= 0.035;
+                if (p.life <= 0) particles.splice(i, 1);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            }
+            ctx.globalAlpha = 1;
+
+            animationId = requestAnimationFrame(loop);
+        }
+
+        // Event Handlers
+        startBtn.onclick = startGame;
+        
+        window.addEventListener('keydown', (e) => { 
+            if(e.code === 'Space' || e.key === ' ') {
+                if (gameActive) { 
+                    e.preventDefault(); 
+                    handleJump(); 
+                } else if (menu.style.display !== 'none' && !nameInput.matches(':focus')) {
+                    startGame();
+                }
+            }
+        });
+
+        // Mobile Touch Support
+        canvas.addEventListener('touchstart', (e) => {
+            if (gameActive) { 
+                e.preventDefault(); 
+                handleJump(); 
+            }
+        }, {passive: false});
+    };
+
+    window.onload = init;
+</script>
+</body>
+</html>
