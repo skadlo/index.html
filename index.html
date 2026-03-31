@@ -174,8 +174,16 @@
             text-transform: uppercase;
             box-shadow: 0 4px 0 #00cccc;
             transition: all 0.1s;
+            margin-bottom: 12px;
         }
         
+        .btn.secondary {
+            background: transparent;
+            border: 2px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            box-shadow: none;
+        }
+
         .btn:active {
             transform: translateY(2px);
             box-shadow: 0 2px 0 #00cccc;
@@ -260,7 +268,6 @@
 
             <div class="rules-box">
                 • 10 Levels to clear the mission<br>
-                • Infinite survival after Lvl 10<br>
                 • Extra jumps granted at Lvl 4 & 8
             </div>
 
@@ -278,9 +285,7 @@
 
     function updateLocalLeaderboard(name, score) {
         leaderboard.push({ name: name || "Anonymous", score: Math.floor(score) });
-        // Sort descending
         leaderboard.sort((a, b) => b.score - a.score);
-        // Keep top 5
         leaderboard = leaderboard.slice(0, 5);
         localStorage.setItem('neon_runner_leaderboard', JSON.stringify(leaderboard));
         renderLeaderboard();
@@ -296,11 +301,9 @@
             return;
         }
 
-        // Top UI
         bestEl.innerText = leaderboard[0].score;
         bestNameEl.innerText = leaderboard[0].name.toUpperCase();
 
-        // Menu List
         list.innerHTML = leaderboard.map((entry, i) => `
             <div class="leaderboard-row">
                 <span class="lb-name">#${i+1} ${entry.name}</span>
@@ -341,7 +344,7 @@
     let lastSpawnFrame = 0;
     let currentSpeed = 7.5;
     let animationId = null;
-    let hasClearedGame = false;
+    let isInfiniteMode = false;
 
     const player = {
         x: 75, y: 0, width: 36, height: 36,
@@ -376,8 +379,13 @@
     }
 
     function triggerLevelUp() {
+        if (currentLevel === 10 && !isInfiniteMode) {
+            handleMissionComplete();
+            return;
+        }
+
         currentLevel++;
-        levelElement.innerText = currentLevel > 10 ? `INF LEVEL ${currentLevel}` : `LEVEL ${currentLevel}`;
+        levelElement.innerText = isInfiniteMode ? `INF LVL ${currentLevel}` : `LEVEL ${currentLevel}`;
         
         if (currentLevel === 4) player.maxJumps = 4;
         if (currentLevel === 8) player.maxJumps = 5;
@@ -385,14 +393,8 @@
         const isMobile = canvas.width < 600;
         currentSpeed += (isMobile ? 0.9 : 1.2);
 
-        if (currentLevel === 11 && !hasClearedGame) {
-            hasClearedGame = true;
-            toastSub.innerText = "MISSION ACCOMPLISHED";
-            toastText.innerText = "GAME CLEARED!";
-        } else {
-            toastSub.innerText = "LEVEL PASSED";
-            toastText.innerText = "GOOD JOB!";
-        }
+        toastSub.innerText = "LEVEL PASSED";
+        toastText.innerText = isInfiniteMode ? "STILL GOING!" : "GOOD JOB!";
 
         levelToast.classList.remove('level-up-anim');
         void levelToast.offsetWidth; 
@@ -409,6 +411,30 @@
             });
         }
         updateJumpUI();
+    }
+
+    function handleMissionComplete() {
+        gameActive = false;
+        cancelAnimationFrame(animationId);
+        
+        menu.style.display = 'block';
+        menuContent.innerHTML = `
+            <h2 style="color: var(--neon-cyan); margin:0; font-size: 24px; text-shadow: 0 0 15px var(--neon-cyan);">MISSION COMPLETE</h2>
+            <div style="font-size: 14px; margin-top: 5px; color: #fff;">LEVEL 10 REACHED</div>
+            <div style="font-size: 60px; font-weight: 900; margin: 10px 0; color: var(--neon-cyan);">${Math.floor(score)}</div>
+            
+            <button class="btn" id="finish-btn">FINISH RUN</button>
+            <button class="btn secondary" id="continue-btn">CONTINUE (INFINITE)</button>
+        `;
+        
+        document.getElementById('finish-btn').onclick = gameWon;
+        document.getElementById('continue-btn').onclick = () => {
+            isInfiniteMode = true;
+            menu.style.display = 'none';
+            gameActive = true;
+            triggerLevelUp();
+            loop();
+        };
     }
 
     function handleJump() {
@@ -433,7 +459,7 @@
         nameInput.blur();
         score = 0;
         currentLevel = 1;
-        hasClearedGame = false;
+        isInfiniteMode = false;
         levelElement.innerText = `LEVEL 1`;
         obstacles = [];
         particles = [];
@@ -451,17 +477,40 @@
         loop();
     }
 
-    function gameOver() {
+    function gameWon() {
         gameActive = false;
         cancelAnimationFrame(animationId);
         const finalScore = Math.floor(score);
-        
-        // Save to Local Leaderboard
         updateLocalLeaderboard(runnerName, finalScore);
 
         menu.style.display = 'block';
         menuContent.innerHTML = `
-            <h2 style="color: var(--neon-magenta); margin:0; font-size: 24px;">FAILURE @ Lvl ${currentLevel}</h2>
+            <h2 style="color: var(--neon-cyan); margin:0; font-size: 24px; text-shadow: 0 0 15px var(--neon-cyan);">MISSION ACCOMPLISHED</h2>
+            <div style="font-size: 14px; margin-top: 5px; color: #fff;">VICTORY RECORDED</div>
+            <div style="font-size: 60px; font-weight: 900; margin: 10px 0; color: var(--neon-cyan);">${finalScore}</div>
+            
+            <div class="leaderboard">
+                <div class="leaderboard-title">Elite Standings</div>
+                <div id="final-lb-list"></div>
+            </div>
+
+            <button class="btn" id="retry-btn">RUN AGAIN</button>
+        `;
+        
+        renderFinalLeaderboard();
+        document.getElementById('retry-btn').onclick = () => location.reload();
+    }
+
+    function gameOver() {
+        gameActive = false;
+        cancelAnimationFrame(animationId);
+        const finalScore = Math.floor(score);
+        updateLocalLeaderboard(runnerName, finalScore);
+
+        menu.style.display = 'block';
+        menuContent.innerHTML = `
+            <h2 style="color: var(--neon-magenta); margin:0; font-size: 28px; text-shadow: 0 0 15px var(--neon-magenta);">GAME OVER</h2>
+            <div style="font-size: 14px; margin-top: 5px; color: #ccc;">${isInfiniteMode ? 'INFINITE MODE ENDED' : 'FAILED @ LVL ' + currentLevel}</div>
             <div style="font-size: 60px; font-weight: 900; margin: 10px 0;">${finalScore}</div>
             
             <div class="leaderboard">
@@ -472,14 +521,15 @@
             <button class="btn" id="retry-btn">RE-START</button>
         `;
         
+        renderFinalLeaderboard();
+        document.getElementById('retry-btn').onclick = () => location.reload();
+    }
+
+    function renderFinalLeaderboard() {
         const list = document.getElementById('final-lb-list');
         list.innerHTML = leaderboard.slice(0, 3).map((e, i) => `
             <div class="leaderboard-row"><span class="lb-name">#${i+1} ${e.name}</span><span class="lb-score">${e.score}</span></div>
         `).join('');
-
-        document.getElementById('retry-btn').onclick = () => {
-            location.reload();
-        };
     }
 
     class Obstacle {
@@ -515,6 +565,7 @@
 
         if (score >= currentLevel * SCORE_PER_LEVEL) {
             triggerLevelUp();
+            if (!gameActive) return; 
         }
 
         player.vy += GRAVITY;
