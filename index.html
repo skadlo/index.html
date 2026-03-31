@@ -105,7 +105,7 @@
             border-radius: 28px;
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
-            display: block; /* Visible initially */
+            display: block;
         }
         
         input {
@@ -241,11 +241,26 @@
             pointer-events: none;
             z-index: 999;
         }
+
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: 900;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 30px var(--neon-cyan);
+            z-index: 50;
+            display: none;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
 <div id="flash-overlay"></div>
+<div id="countdown">3</div>
 <div id="game-container">
     <div id="progress-container"><div id="progress-bar"></div></div>
     
@@ -307,6 +322,7 @@
     const flashOverlay = document.getElementById('flash-overlay');
     const nameInput = document.getElementById('username');
     const jumpIndicator = document.getElementById('jump-indicator');
+    const countdownEl = document.getElementById('countdown');
 
     const GRAVITY = 0.65;
     const JUMP_FORCE = -11.8; 
@@ -317,17 +333,17 @@
     let score = 0;
     let currentLevel = 1;
     let obstacles = [];
-    let particles = [];
     let frameCount = 0;
     let lastSpawnFrame = 0;
     let currentSpeed = 7.5;
     let animationId = null;
     let isInfiniteMode = false;
     let shakeAmount = 0;
+    let isCountdownActive = false;
 
     const player = {
         x: 75, y: 0, width: 36, height: 36,
-        vy: 0, jumpsLeft: 3, maxJumps: 3, trail: []
+        vy: 0, jumpsLeft: 3, maxJumps: 3
     };
 
     // --- Init ---
@@ -396,6 +412,31 @@
         updateJumpUI();
     }
 
+    function startCountdown(callback) {
+        isCountdownActive = true;
+        countdownEl.style.display = 'block';
+        let count = 3;
+        countdownEl.innerText = count;
+        
+        // Clear all obstacles and reset spawn timer so player isn't immediately hit
+        obstacles = [];
+        lastSpawnFrame = frameCount + 120; // 2 second delay on next spawn after GO
+
+        const interval = setInterval(() => {
+            count--;
+            if (count > 0) {
+                countdownEl.innerText = count;
+            } else if (count === 0) {
+                countdownEl.innerText = "GO!";
+            } else {
+                clearInterval(interval);
+                countdownEl.style.display = 'none';
+                isCountdownActive = false;
+                callback();
+            }
+        }, 800);
+    }
+
     function pauseForChoice() {
         gameActive = false;
         cancelAnimationFrame(animationId);
@@ -410,9 +451,11 @@
         document.getElementById('inf-btn').onclick = () => {
             isInfiniteMode = true;
             menu.style.display = 'none';
-            gameActive = true;
-            triggerLevelUp();
-            loop();
+            startCountdown(() => {
+                gameActive = true;
+                triggerLevelUp();
+                loop();
+            });
         };
     }
 
@@ -447,9 +490,9 @@
         localStorage.setItem('neon_runner_name_v2', runnerName);
         
         score = 0; currentLevel = 1; isInfiniteMode = false;
-        obstacles = []; particles = []; frameCount = 0;
+        obstacles = []; frameCount = 0;
         currentSpeed = 7.5; player.vy = 0; player.maxJumps = 3;
-        player.jumpsLeft = 3; player.trail = [];
+        player.jumpsLeft = 3;
         player.y = canvas.height - GROUND_HEIGHT - player.height;
         
         menu.style.display = 'none';
@@ -461,7 +504,6 @@
     function loop() {
         if (!gameActive) return;
 
-        // Clear and Shake
         if (shakeAmount > 0) shakeAmount *= 0.9;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = '#000';
@@ -475,12 +517,10 @@
         score += (currentSpeed / 10);
         scoreElement.innerText = Math.floor(score);
         
-        // Progress
         const levelProgress = (score % SCORE_PER_LEVEL) / SCORE_PER_LEVEL;
         progressBar.style.width = `${levelProgress * 100}%`;
         if (score >= currentLevel * SCORE_PER_LEVEL) triggerLevelUp();
 
-        // Player Physics
         player.vy += GRAVITY;
         player.y += player.vy;
         const floorPos = canvas.height - GROUND_HEIGHT - player.height;
@@ -491,15 +531,14 @@
             }
         }
 
-        // Obstacles
+        // Spawning logic (only spawn if countdown isn't active)
         let minSafe = Math.max(45, 65 - currentLevel);
-        if ((frameCount - lastSpawnFrame) > minSafe && Math.random() < 0.04) {
+        if (!isCountdownActive && (frameCount - lastSpawnFrame) > minSafe && Math.random() < 0.04) {
             const h = 40 + Math.random() * Math.min(130, 40 + currentLevel * 7);
             obstacles.push({ x: canvas.width + 50, y: canvas.height - GROUND_HEIGHT - h, w: 30+Math.random()*25, h: h });
             lastSpawnFrame = frameCount;
         }
 
-        // Collision & Movement
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const o = obstacles[i];
             o.x -= currentSpeed;
@@ -507,7 +546,6 @@
             if (player.x < o.x + o.w && player.x + player.width > o.x && 
                 player.y < o.y + o.h && player.y + player.height > o.y) {
                 
-                // CRASH EFFECT
                 gameActive = false;
                 shakeAmount = 20;
                 flashOverlay.style.opacity = '0.5';
@@ -515,12 +553,11 @@
                 
                 cancelAnimationFrame(animationId);
                 endGameUI("DEFEAT");
-                return; // Hard exit loop
+                return;
             }
             if (o.x < -100) obstacles.splice(i, 1);
         }
 
-        // Draw World
         ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(0, canvas.height - GROUND_HEIGHT); ctx.lineTo(canvas.width, canvas.height - GROUND_HEIGHT); ctx.stroke();
 
@@ -533,9 +570,8 @@
         animationId = requestAnimationFrame(loop);
     }
 
-    // Input
     function handleAction() {
-        if (!gameActive) return;
+        if (!gameActive || isCountdownActive) return; // Prevent jump during countdown
         if (player.jumpsLeft > 0) {
             player.vy = JUMP_FORCE;
             player.jumpsLeft--;
