@@ -239,7 +239,7 @@
                 • Short Intense Levels (1-10)<br>
                 • <strong>Lvl 4:</strong> +1 Jump (4 total)<br>
                 • <strong>Lvl 8:</strong> +1 Jump (5 total)<br>
-                • Level Clear Rewards: Confetti & Status
+                • Mobile Optimized Scaling
             </div>
 
             <button class="btn" id="start-btn">INITIATE RUN</button>
@@ -303,6 +303,12 @@
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            
+            // Optimization for Phone Users:
+            // If screen is vertical/small, move player further left to give more reaction time
+            const isMobile = canvas.width < 600;
+            player.x = isMobile ? 40 : 75;
+            
             player.y = canvas.height - GROUND_HEIGHT - player.height;
             drawStaticBackground();
         }
@@ -340,7 +346,11 @@
             if (currentLevel === 4) player.maxJumps = 4;
             if (currentLevel === 8) player.maxJumps = 5;
 
-            currentSpeed += 1.2; 
+            // DIFFICULTY ADJUSTMENT FOR MOBILE:
+            // Scale speed increase slower if screen width is narrow (phone)
+            const speedIncrement = (canvas.width < 600) ? 0.9 : 1.2;
+            currentSpeed += speedIncrement; 
+            
             velocityElement.innerText = `${currentSpeed.toFixed(2)}x`;
             
             toastText.innerText = "GOOD JOB!";
@@ -487,14 +497,20 @@
             player.trail.push({x: player.x, y: player.y});
             if (player.trail.length > 8) player.trail.shift();
 
-            // DIFFICULTY ADJUSTMENT: 
-            // Level 7+ Buffer: We cap the minimum frames between obstacles at 45 
-            // to ensure players have room to land and jump again, even as speed increases.
-            const minSafeFrames = Math.max(45, 65 - (currentLevel * 2)); 
+            // DIFFICULTY ADJUSTMENT FOR LATE GAME & MOBILE: 
+            // We increase the 'buffer' (minSafeFrames) especially at high levels
+            // to prevent impossible obstacles on small screens.
+            let minSafeFrames = Math.max(50, 70 - (currentLevel * 1.5)); 
+            
+            // Extra safety at Level 7+ for phone users
+            if (currentLevel >= 7 && canvas.width < 600) {
+                minSafeFrames += 15; 
+            }
+
             const framesSinceLast = frameCount - lastSpawnFrame;
             
             // Capped spawn probability for high levels to avoid "walls" of obstacles
-            const spawnThreshold = Math.min(0.04, 0.015 + (currentLevel * 0.003));
+            const spawnThreshold = Math.min(0.035, 0.015 + (currentLevel * 0.002));
 
             if (framesSinceLast > minSafeFrames && Math.random() < spawnThreshold) {
                 obstacles.push(new Obstacle());
